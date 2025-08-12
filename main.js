@@ -1,5 +1,5 @@
 
-// --- IMPORTS & INITIALIZATION ---
+// --- initialization of supabase ---
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
 // --- CONFIGURATION ---
@@ -692,3 +692,4 @@ function showNotification(message, isError = false) {
 window.app = { handleAcceptBid: app.handleAcceptBid };
 window.ui = { closeModal: ui.closeModal };
 app.init();
+
