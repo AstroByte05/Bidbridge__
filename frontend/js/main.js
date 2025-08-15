@@ -62,6 +62,9 @@ const api = {
     deleteTask: (taskId) => api.request(`/tasks/${taskId}`, { method: 'DELETE' }),
     getMyTasks: () => api.request('/my-tasks'),
     getMyBids: () => api.request('/my-bids'),
+    // *** NEW: API functions for profile management ***
+    getProfile: () => api.request('/profile'),
+    updateProfile: (data) => api.request('/profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // --- AUTHENTICATION CONTROLLER ---
@@ -102,6 +105,7 @@ const authController = {
             const { error } = await supabase.auth.signOut();
             if (error) throw error;
             state.user = null;
+            state.profile = null; // Clear profile on logout
             window.location.hash = '#login';
         } catch (error) {
             showNotification(error.message, true);
@@ -124,6 +128,7 @@ const authController = {
         mobileMenu.innerHTML = '';
         if (user) {
             mobileMenu.innerHTML = `
+                <a href="#profile" class="nav-link btn btn-secondary w-full">My Profile</a>
                 <button id="mobile-post-task-btn" class="btn btn-primary w-full">Post a Task</button>
                 <button id="mobile-logout-btn" class="btn btn-secondary w-full">Logout</button>
             `;
@@ -383,6 +388,94 @@ const ui = {
             <p class="mt-1 text-sm text-slate-500">${text}</p>
         </div>
     `,
+
+   // *** NEW: Profile View for Verification ***
+    ProfileView: (profile) => {
+        const isSeller = profile.role === 'seller';
+        let verificationContent = '';
+
+        switch (profile.verification_status) {
+            case 'unverified':
+                verificationContent = `
+                    <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <h4 class="font-semibold text-yellow-800">Complete Your Verification</h4>
+                        <p class="text-sm text-yellow-700 mt-1">To increase trust and get more bids, please complete your profile and upload a verification document.</p>
+                    </div>
+                `;
+                break;
+            case 'pending':
+                verificationContent = `
+                    <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h4 class="font-semibold text-blue-800">Verification Pending</h4>
+                        <p class="text-sm text-blue-700 mt-1">Your document has been submitted and is awaiting admin approval. This usually takes 1-2 business days.</p>
+                    </div>
+                `;
+                break;
+            case 'verified':
+                verificationContent = `
+                    <div class="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
+                        <i data-lucide="shield-check" class="h-6 w-6 text-green-600"></i>
+                        <div>
+                            <h4 class="font-semibold text-green-800">You are Verified!</h4>
+                            <p class="text-sm text-green-700">Task posters will now see a verified badge next to your bids.</p>
+                        </div>
+                    </div>
+                `;
+                break;
+        }
+
+        return `
+        <div class="fade-in max-w-4xl mx-auto">
+            <h1 class="font-heading text-4xl font-bold mb-8">My Profile</h1>
+            <div class="bg-white p-8 rounded-2xl shadow-lg">
+                <form id="profile-form">
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="profile-email" class="block text-sm font-medium text-slate-600 mb-2">Email</label>
+                            <input type="email" id="profile-email" value="${profile.email}" disabled class="form-input bg-slate-100 cursor-not-allowed">
+                        </div>
+                        <div>
+                            <label for="profile-role" class="block text-sm font-medium text-slate-600 mb-2">Account Type</label>
+                            <input type="text" id="profile-role" value="${profile.role === 'buyer' ? 'Task Poster' : 'Delivery Partner'}" disabled class="form-input bg-slate-100 cursor-not-allowed">
+                        </div>
+                        <div>
+                            <label for="profile-name" class="block text-sm font-medium text-slate-600 mb-2">Full Name</label>
+                            <input type="text" id="profile-name" name="full_name" value="${profile.full_name || ''}" class="form-input">
+                        </div>
+                        <div>
+                            <label for="profile-phone" class="block text-sm font-medium text-slate-600 mb-2">Phone Number</label>
+                            <input type="tel" id="profile-phone" name="phone_number" value="${profile.phone_number || ''}" class="form-input">
+                        </div>
+                    </div>
+                    <div class="mt-6">
+                        <button type="submit" class="btn btn-primary">Save Profile</button>
+                    </div>
+                </form>
+
+                ${isSeller ? `
+                <hr class="my-8">
+                <div>
+                    <h3 class="font-heading text-2xl font-semibold mb-4">Verification Status</h3>
+                    ${verificationContent}
+                    ${profile.verification_status !== 'verified' ? `
+                    <form id="verification-form" class="mt-6">
+                        <div>
+                            <label for="verification-doc" class="block text-sm font-medium text-slate-600 mb-2">Upload Verification Document</label>
+                            <input type="file" id="verification-doc" required class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"/>
+                            <p class="text-xs text-slate-500 mt-1">e.g., Aadhaar Card, Driver's License. Max file size 5MB.</p>
+                        </div>
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-secondary">Upload and Submit for Review</button>
+                        </div>
+                    </form>
+                    ` : ''}
+                </div>
+                ` : ''}
+            </div>
+        </div>
+        `;
+    },
+
     openModal(html) {
         modalContent.innerHTML = html;
         lucide.createIcons();
@@ -402,7 +495,6 @@ const ui = {
     },
 };
 
-// --- ROUTER ---
 const router = {
     cleanup() {
         if (state.taskSubscription) supabase.removeChannel(state.taskSubscription);
@@ -414,7 +506,7 @@ const router = {
         const path = window.location.hash || '';
         
         const isAuthRoute = path === '#login' || path === '#register';
-        const isProtectedRoute = path.startsWith('#dashboard') || path.startsWith('#task-');
+        const isProtectedRoute = path.startsWith('#dashboard') || path.startsWith('#task-') || path === '#profile';
         if (!state.user && isProtectedRoute) return window.location.hash = '#login';
         if (state.user && (isAuthRoute || path === '')) return window.location.hash = '#dashboard';
 
@@ -430,66 +522,79 @@ const router = {
                 case '#dashboard/my-tasks': await app.loadMyTasks(); break;
                 case '#dashboard/my-bids': await app.loadMyBids(); break;
                 case '#dashboard/browse': await app.loadBrowseTasks(); break;
+                // *** NEW: Route for the profile page ***
+                case '#profile': await app.loadProfile(); break;
                 default: ui.render(ui.WelcomeView());
             }
         }
     }
 };
-
 // --- MAIN APP CONTROLLER ---
 const app = {
     init() {
         authController.init();
         this.addEventListeners();
     },
-    addEventListeners() {
-        document.body.addEventListener('click', e => {
-            const navLink = e.target.closest('.nav-link');
-            if (navLink) {
-                e.preventDefault();
-                const newHash = new URL(navLink.href).hash;
-                if (window.location.hash !== newHash) window.location.hash = newHash;
-            }
-            if (e.target.closest('#logout-btn') || e.target.closest('#mobile-logout-btn')) authController.handleLogout();
-            if (e.target.closest('#post-task-btn') || e.target.closest('#mobile-post-task-btn')) ui.openModal(ui.PostTaskModal());
-            if (e.target.closest('#mobile-menu-btn')) mobileMenu.classList.toggle('hidden');
-            if (e.target.closest('#suggest-details-btn')) this.handleAiSuggest(e.target.closest('#suggest-details-btn'));
-            if (e.target.closest('#delete-task-btn')) this.handleDeleteTask();
-        });
-        document.body.addEventListener('submit', e => {
+   addEventListeners() {
+    document.body.addEventListener('click', e => {
+        const navLink = e.target.closest('.nav-link');
+        if (navLink) {
             e.preventDefault();
-            const form = e.target;
-            if (form.id === 'login-form') authController.handleLogin(form.email.value, form.password.value);
-            else if (form.id === 'register-form') authController.handleRegister(form);
-            else if (form.id === 'post-task-form') this.handlePostTask(form);
-            else if (form.id === 'bid-form') this.handlePostBid(form);
-            else if (form.id === 'chat-form') this.handleSendMessage(form);
-        });
-        window.addEventListener('hashchange', () => router.handleLocation());
-    },
-    
-    async loadDashboard() {
-        try {
-            const { data: profile, error } = await supabase.from('users').select('role').eq('id', state.user.id).single();
-            if (error) {
-                // If profile not found, default to seller/browse view
-                if (error.code === 'PGRST116') {
-                    return app.loadBrowseTasks();
-                }
-                throw error;
-            }
-
-            if (profile.role === 'buyer') {
-                window.location.hash = '#dashboard/my-tasks';
-            } else {
-                window.location.hash = '#dashboard/my-bids';
-            }
-        } catch (error) {
-            showNotification(error.message, true);
-            // Fallback to browse tasks if role check fails
-            app.loadBrowseTasks();
+            const newHash = new URL(navLink.href).hash;
+            if (window.location.hash !== newHash) window.location.hash = newHash;
         }
-    },
+        if (e.target.closest('#logout-btn') || e.target.closest('#mobile-logout-btn')) authController.handleLogout();
+        if (e.target.closest('#post-task-btn') || e.target.closest('#mobile-post-task-btn')) ui.openModal(ui.PostTaskModal());
+        if (e.target.closest('#mobile-menu-btn')) mobileMenu.classList.toggle('hidden');
+        if (e.target.closest('#suggest-details-btn')) this.handleAiSuggest(e.target.closest('#suggest-details-btn'));
+        if (e.target.closest('#delete-task-btn')) this.handleDeleteTask();
+
+        // *** FIX: Added event listener for the notification bell ***
+        const bell = e.target.closest('#notification-bell');
+        const notificationList = document.getElementById('notification-list');
+        if (bell) {
+            notificationList.classList.toggle('hidden');
+        } else if (!e.target.closest('#notification-list')) {
+            notificationList.classList.add('hidden');
+        }
+    });
+    document.body.addEventListener('submit', e => {
+        e.preventDefault();
+        const form = e.target;
+        if (form.id === 'login-form') authController.handleLogin(form.email.value, form.password.value);
+        else if (form.id === 'register-form') authController.handleRegister(form);
+        else if (form.id === 'post-task-form') this.handlePostTask(form);
+        else if (form.id === 'bid-form') this.handlePostBid(form);
+        else if (form.id === 'chat-form') this.handleSendMessage(form);
+        else if (form.id === 'profile-form') this.handleUpdateProfile(form);
+        else if (form.id === 'verification-form') this.handleVerificationUpload(form);
+    });
+    window.addEventListener('hashchange', () => router.handleLocation());
+},
+    
+ async loadDashboard() {
+    try {
+        const { data: profile, error } = await supabase.from('users').select('role').eq('id', state.user.id).single();
+        if (error) {
+            if (error.code === 'PGRST116') { // Profile not found, default to seller/browse view
+                return app.loadBrowseTasks();
+            }
+            throw error;
+        }
+
+        // *** FIX: Subscribe to notifications when the dashboard loads ***
+        app.subscribeToNotifications();
+
+        if (profile.role === 'buyer') {
+            window.location.hash = '#dashboard/my-tasks';
+        } else {
+            window.location.hash = '#dashboard/my-bids';
+        }
+    } catch (error) {
+        showNotification(error.message, true);
+        app.loadBrowseTasks(); // Fallback to browse tasks if role check fails
+    }
+},
     async loadMyTasks() {
         try {
             const tasks = await api.getMyTasks();
@@ -536,6 +641,18 @@ const app = {
             showNotification(error.message, true);
         }
     },
+
+ async loadProfile() {
+        try {
+            const profile = await api.getProfile();
+            state.profile = profile;
+            ui.render(ui.ProfileView(profile));
+            lucide.createIcons();
+        } catch (error) {
+            showNotification(error.message, true);
+        }
+    },
+
 
     async handlePostTask(form) {
         const taskData = {
@@ -594,7 +711,83 @@ const app = {
             }
         }
     },
-    
+    // Add this new function inside the main 'app' object
+subscribeToNotifications() {
+    if (!state.user) return; // Don't run if the user isn't logged in
+
+    const notificationCount = document.getElementById('notification-count');
+    const notificationList = document.getElementById('notification-list');
+
+    // Fetch initial unread notifications
+    supabase.from('notifications').select('*').eq('is_read', false).eq('user_id', state.user.id).then(({ data, error }) => {
+        if (data && data.length > 0) {
+            notificationCount.textContent = data.length;
+            notificationCount.classList.remove('hidden');
+            notificationList.innerHTML = data.map(n => `<a href="${n.link}" class="block p-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">${n.message}</a>`).join('');
+        } else {
+            notificationCount.classList.add('hidden');
+            notificationList.innerHTML = `<p class="p-2 text-sm text-slate-500">No new notifications.</p>`;
+        }
+    });
+
+    // Listen for new notifications in real-time
+    supabase.channel('public:notifications')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${state.user.id}` }, payload => {
+            showNotification("You have a new notification!");
+            // Simple reload of notifications on new event
+            this.subscribeToNotifications();
+        }).subscribe();
+},
+      async handleUpdateProfile(form) {
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        try {
+            await api.updateProfile(data);
+            showNotification('Profile saved successfully!');
+        } catch (error) {
+            showNotification(error.message, true);
+        }
+    },
+    async handleVerificationUpload(form) {
+        const docFile = form.querySelector('#verification-doc').files[0];
+        if (!docFile) return showNotification('Please select a file to upload.', true);
+
+        const button = form.querySelector('button');
+        button.disabled = true;
+        button.innerHTML = `<i data-lucide="loader" class="animate-spin h-4 w-4"></i> Uploading...`;
+        lucide.createIcons();
+
+        try {
+            // Create a unique file path
+            const filePath = `${state.user.id}/${Date.now()}-${docFile.name}`;
+            
+            // Upload the file to Supabase Storage
+            const { error: uploadError } = await supabase.storage
+                .from('verification-documents')
+                .upload(filePath, docFile);
+
+            if (uploadError) throw uploadError;
+
+            // Get the public URL of the uploaded file
+            const { data: { publicUrl } } = supabase.storage
+                .from('verification-documents')
+                .getPublicUrl(filePath);
+            
+            // Update the user's profile with the document URL
+            await api.updateProfile({ document_url: publicUrl });
+
+            showNotification('Document uploaded! Your profile is now pending review.');
+            this.loadProfile(); // Refresh the profile view
+
+        } catch (error) {
+            showNotification(error.message, true);
+        } finally {
+            button.disabled = false;
+            button.innerHTML = `Upload and Submit for Review`;
+        }
+    },
+
+
     subscribeToAllTasks() {
         state.taskSubscription = supabase.channel('public:tasks')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, payload => {

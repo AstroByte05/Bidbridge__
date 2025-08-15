@@ -41,23 +41,14 @@ CORS(app)
 
 
 # --- Helper Function to Ensure User Profile Exists ---
-
 def ensure_user_profile_exists(user_id, email):
-    """
-    Checks if a user profile exists in public.users and creates it if not.
-    This is a self-healing mechanism for the database.
-    """
     try:
-        # *** FIX: Use a single, atomic "upsert" operation. ***
-        # This will create the profile if it doesn't exist, or do nothing if it does.
-        # It safely handles all cases, including the "duplicate email" error.
         supabase_client.table('users').upsert({
-            'id': str(user_id), # Ensure ID is a string
+            'id': str(user_id),
             'email': email
         }).execute()
         return True
     except Exception as e:
-        # If there's any other unexpected error, log it and fail.
         app.logger.error(f"CRITICAL: Failed to upsert user profile for {user_id}: {e}")
         return False
 
@@ -76,10 +67,8 @@ def require_auth(f):
             user = user_response.user
             kwargs['user'] = user
             
-            # *** FIX: Explicitly check if the profile was created successfully ***
             profile_ok = ensure_user_profile_exists(user.id, user.email)
             if not profile_ok:
-                # If the profile creation failed, we cannot proceed.
                 return jsonify({"error": "Could not verify user profile. Please try again."}), 500
 
         except Exception as e:
@@ -90,11 +79,9 @@ def require_auth(f):
     return decorated_function
 
 # --- API ROUTES ---
+
 @app.route('/register', methods=['POST'])
 def register_user():
-    """
-    Handles user registration using the admin client for reliability.
-    """
     data = request.json
     email = data.get('email')
     password = data.get('password')
@@ -104,7 +91,6 @@ def register_user():
         return jsonify({"error": "Email and password are required."}), 400
 
     try:
-        # Step 1: Create the user in Supabase Auth's admin system.
         created_user_res = supabase_client.auth.admin.create_user({
             "email": email,
             "password": password,
@@ -113,7 +99,6 @@ def register_user():
         
         new_user = created_user_res.user
 
-        # Step 2: Immediately create the public profile.
         profile_response = supabase_client.table('users').insert({
             'id': str(new_user.id),
             'email': new_user.email,
@@ -123,15 +108,43 @@ def register_user():
         return jsonify({"message": "Registration successful! You can now log in."}), 201
 
     except Exception as e:
-        app.logger.error(f"REGISTRATION ERROR: {e}")
-        error_message = str(e)
-        
-        # *** FIX: More robust error checking for duplicate users ***
-        if "User already exists" in error_message or 'duplicate key value violates unique constraint "users_email_key"' in error_message:
+        app.logger.error(f"REGISTRATION CRASH: {e}")
+        if "User already exists" in str(e):
              return jsonify({"error": "A user with this email already exists."}), 400
-        
         return jsonify({"error": "An unexpected server error occurred during registration."}), 500
 
+# *** NEW: ROUTES FOR PROFILE AND VERIFICATION ***
+@app.route('/profile', methods=['GET', 'PUT'])
+@require_auth
+def handle_profile(user):
+    """
+    Handles fetching and updating the user's own profile.
+    """
+    if request.method == 'GET':
+        try:
+            profile_res = supabase_client.table('users').select('*').eq('id', str(user.id)).single().execute()
+            return jsonify(profile_res.data), 200
+        except Exception as e:
+            app.logger.error(f"Error fetching profile: {e}")
+            return jsonify({"error": "Could not fetch user profile."}), 500
+
+    if request.method == 'PUT':
+        data = request.json
+        try:
+            update_payload = {
+                'full_name': data.get('full_name'),
+                'phone_number': data.get('phone_number')
+            }
+            # If a document URL is provided, update it and set status to 'pending'
+            if data.get('document_url'):
+                update_payload['document_url'] = data.get('document_url')
+                update_payload['verification_status'] = 'pending'
+
+            updated_profile_res = supabase_client.table('users').update(update_payload).eq('id', str(user.id)).execute()
+            return jsonify(updated_profile_res.data[0]), 200
+        except Exception as e:
+            app.logger.error(f"Error updating profile: {e}")
+            return jsonify({"error": "Could not update user profile."}), 500
 
 
 @app.route('/suggest-description', methods=['POST'])
@@ -164,7 +177,6 @@ def suggest_description(user):
 @app.route('/tasks', methods=['GET'])
 def get_all_tasks():
     try:
-        # *** FIX: Explicitly define the join to the poster via the foreign key ***
         tasks_response = supabase_client.table('tasks').select("*, users!tasks_poster_id_fkey(email)").order('created_at', desc=True).execute()
         return jsonify(tasks_response.data), 200
     except Exception as e:
@@ -186,7 +198,6 @@ def create_task(user):
         'poster_id': str(user.id)
     }
 
-    # If the task is marked as urgent, set its expiration time
     if is_urgent:
         task_payload['expires_at'] = (datetime.utcnow() + timedelta(hours=24)).isoformat()
 
@@ -196,30 +207,29 @@ def create_task(user):
     except Exception as e:
         app.logger.error(f"Error creating task: {e}")
         return jsonify({"error": str(e)}), 500
-    
+
 @app.route('/tasks/<int:task_id>', methods=['GET'])
 def get_task_details(task_id):
     try:
-        # *** FIX: Explicitly define the join for the task's poster ***
         task_response = supabase_client.table('tasks').select("*, users!tasks_poster_id_fkey(email)").eq('id', task_id).single().execute()
         if not task_response.data:
             return jsonify({"error": "Task not found"}), 404
         
-        # *** FIX: Explicitly define the join for the bidders ***
         bids_response = supabase_client.table('bids').select("*, users!bids_bidder_id_fkey(email)").eq('task_id', task_id).execute()
         
         return jsonify({"task": task_response.data, "bids": bids_response.data}), 200
     except Exception as e:
         app.logger.error(f"Error in get_task_details: {e}")
         return jsonify({"error": str(e)}), 500
-
-
+    
+    
+    
 @app.route('/my-tasks', methods=['GET'])
 @require_auth
 def get_my_tasks(user):
     """Fetches all tasks posted by the current user (for buyers)."""
     try:
-        tasks_response = supabase_client.table('tasks').select("*").eq('poster_id', str(user.id)).order('created_at', desc=True).execute()
+        tasks_response = supabase_client.table('tasks').select("*, users!tasks_poster_id_fkey(email)").eq('poster_id', str(user.id)).order('created_at', desc=True).execute()
         return jsonify(tasks_response.data), 200
     except Exception as e:
         app.logger.error(f"Error fetching my-tasks: {e}")
@@ -232,53 +242,59 @@ def get_my_bids(user):
     try:
         # This is a more complex query to get tasks based on bids
         bids_response = supabase_client.table('bids').select("task_id").eq('bidder_id', str(user.id)).execute()
-        task_ids = [bid['task_id'] for bid in bids_response.data]
+
+        # Extract just the task IDs from the bids
+        task_ids = list(set(bid['task_id'] for bid in bids_response.data))
 
         if not task_ids:
             return jsonify([]), 200
 
+        # Fetch all tasks that match the retrieved IDs
         tasks_response = supabase_client.table('tasks').select("*, users!tasks_poster_id_fkey(email)").in_('id', task_ids).order('created_at', desc=True).execute()
         return jsonify(tasks_response.data), 200
     except Exception as e:
         app.logger.error(f"Error fetching my-bids: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/tasks/<int:task_id>', methods=['DELETE'])
+@require_auth
+def delete_task(user, task_id):
+    try:
+        task_res = supabase_client.table('tasks').select('poster_id').eq('id', task_id).single().execute()
+        if not task_res.data:
+            return jsonify({"error": "Task not found"}), 404
+        if task_res.data['poster_id'] != str(user.id):
+            return jsonify({"error": "You are not authorized to delete this task"}), 403
+        delete_response = supabase_client.table('tasks').delete().eq('id', task_id).execute()
+        return jsonify({"message": "Task deleted successfully"}), 200
+    except Exception as e:
+        app.logger.error(f"Error deleting task {task_id}: {e}")
+        return jsonify({"error": "An internal server error occurred."}), 500
 
 @app.route('/tasks/<int:task_id>/bids', methods=['POST'])
 @require_auth
 def post_bid(user, task_id):
     data = request.json
     try:
-        task_owner_res = supabase_client.table('tasks').select('poster_id, title').eq('id', task_id).single().execute()
+        task_owner_res = supabase_client.table('tasks').select('poster_id').eq('id', task_id).single().execute()
+        
         if not task_owner_res.data:
             return jsonify({"error": "Task not found."}), 404
 
-        task_data = task_owner_res.data
-        if task_data['poster_id'] == str(user.id):
+        if task_owner_res.data['poster_id'] == str(user.id):
             return jsonify({"error": "You cannot bid on your own task."}), 403
 
-        # Create the bid
-        bid_response = supabase_client.table('bids').insert({
+        response = supabase_client.table('bids').insert({
             'amount': data['amount'],
             'time_estimate': data['timeEstimate'],
             'task_id': task_id,
             'bidder_id': str(user.id)
         }).execute()
-
-        # Create a notification for the task owner
-        supabase_client.table('notifications').insert({
-            'user_id': task_data['poster_id'],
-            'message': f"You have a new bid on your task: '{task_data['title']}'",
-            'link': f'#task-{task_id}'
-        }).execute()
-
-        return jsonify(bid_response.data[0]), 201
+        return jsonify(response.data[0]), 201
     except Exception as e:
         app.logger.error(f"Error posting bid: {e}")
         return jsonify({"error": "An internal server error occurred."}), 500
-    
-    
-    
+
 @app.route('/tasks/<int:task_id>/accept_bid', methods=['POST'])
 @require_auth
 def accept_bid(user, task_id):
@@ -287,20 +303,18 @@ def accept_bid(user, task_id):
         task_res = supabase_client.table('tasks').select('poster_id, title').eq('id', task_id).single().execute()
         if not task_res.data or task_res.data['poster_id'] != str(user.id):
             return jsonify({"error": "Unauthorized"}), 403
-
+        
         task_data = task_res.data
         bid_info = supabase_client.table('bids').select('bidder_id').eq('id', bid_id).single().execute()
         if not bid_info.data:
             return jsonify({"error": "Bid not found"}), 404
 
-        # Update the task
         update_response = supabase_client.table('tasks').update({
             'status': 'assigned',
             'volunteer_id': bid_info.data['bidder_id'],
             'accepted_bid_id': bid_id
         }).eq('id', task_id).execute()
 
-        # Create a notification for the winning bidder
         supabase_client.table('notifications').insert({
             'user_id': bid_info.data['bidder_id'],
             'message': f"Your bid for '{task_data['title']}' was accepted!",
@@ -310,32 +324,6 @@ def accept_bid(user, task_id):
         return jsonify(update_response.data[0]), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-@app.route('/tasks/<int:task_id>', methods=['DELETE'])
-@require_auth
-def delete_task(user, task_id):
-    """
-    Protected route for a user to delete their own task.
-    """
-    try:
-        # First, find the task to verify the owner.
-        task_res = supabase_client.table('tasks').select('poster_id').eq('id', task_id).single().execute()
-
-        if not task_res.data:
-            return jsonify({"error": "Task not found"}), 404
-
-        # Security check: Ensure the person deleting is the owner.
-        if task_res.data['poster_id'] != str(user.id):
-            return jsonify({"error": "You are not authorized to delete this task"}), 403
-
-        # If the check passes, delete the task.
-        delete_response = supabase_client.table('tasks').delete().eq('id', task_id).execute()
-
-        return jsonify({"message": "Task deleted successfully"}), 200
-
-    except Exception as e:
-        app.logger.error(f"Error deleting task {task_id}: {e}")
-        return jsonify({"error": "An internal server error occurred."}), 500
 
 # --- Main execution ---
 if __name__ == '__main__':
