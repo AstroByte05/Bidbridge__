@@ -90,7 +90,6 @@ def require_auth(f):
     return decorated_function
 
 # --- API ROUTES ---
-
 @app.route('/register', methods=['POST'])
 def register_user():
     """
@@ -99,6 +98,7 @@ def register_user():
     data = request.json
     email = data.get('email')
     password = data.get('password')
+    role = data.get('role', 'seller')
 
     if not email or not password:
         return jsonify({"error": "Email and password are required."}), 400
@@ -111,21 +111,27 @@ def register_user():
             "email_confirm": True,
         })
         
-        new_user = created_user_res
+        new_user = created_user_res.user
 
-        # Step 2: Immediately create the public profile, ensuring the ID is a string.
+        # Step 2: Immediately create the public profile.
         profile_response = supabase_client.table('users').insert({
             'id': str(new_user.id),
-            'email': new_user.email
+            'email': new_user.email,
+            'role': role
         }).execute()
 
         return jsonify({"message": "Registration successful! You can now log in."}), 201
 
     except Exception as e:
-        app.logger.error(f"REGISTRATION CRASH: {e}")
-        if "User already exists" in str(e):
+        app.logger.error(f"REGISTRATION ERROR: {e}")
+        error_message = str(e)
+        
+        # *** FIX: More robust error checking for duplicate users ***
+        if "User already exists" in error_message or 'duplicate key value violates unique constraint "users_email_key"' in error_message:
              return jsonify({"error": "A user with this email already exists."}), 400
+        
         return jsonify({"error": "An unexpected server error occurred during registration."}), 500
+
 
 
 @app.route('/suggest-description', methods=['POST'])
@@ -205,6 +211,36 @@ def get_task_details(task_id):
         return jsonify({"task": task_response.data, "bids": bids_response.data}), 200
     except Exception as e:
         app.logger.error(f"Error in get_task_details: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/my-tasks', methods=['GET'])
+@require_auth
+def get_my_tasks(user):
+    """Fetches all tasks posted by the current user (for buyers)."""
+    try:
+        tasks_response = supabase_client.table('tasks').select("*").eq('poster_id', str(user.id)).order('created_at', desc=True).execute()
+        return jsonify(tasks_response.data), 200
+    except Exception as e:
+        app.logger.error(f"Error fetching my-tasks: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/my-bids', methods=['GET'])
+@require_auth
+def get_my_bids(user):
+    """Fetches all tasks the current user has bid on (for sellers)."""
+    try:
+        # This is a more complex query to get tasks based on bids
+        bids_response = supabase_client.table('bids').select("task_id").eq('bidder_id', str(user.id)).execute()
+        task_ids = [bid['task_id'] for bid in bids_response.data]
+
+        if not task_ids:
+            return jsonify([]), 200
+
+        tasks_response = supabase_client.table('tasks').select("*, users!tasks_poster_id_fkey(email)").in_('id', task_ids).order('created_at', desc=True).execute()
+        return jsonify(tasks_response.data), 200
+    except Exception as e:
+        app.logger.error(f"Error fetching my-bids: {e}")
         return jsonify({"error": str(e)}), 500
 
 

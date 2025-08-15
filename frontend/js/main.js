@@ -7,6 +7,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // --- INITIALIZATION ---
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+
 // --- GLOBAL STATE ---
 const state = {
     user: null,
@@ -59,6 +60,8 @@ const api = {
     },
     suggestDescription: (title) => api.request('/suggest-description', { method: 'POST', body: JSON.stringify({ title }) }),
     deleteTask: (taskId) => api.request(`/tasks/${taskId}`, { method: 'DELETE' }),
+    getMyTasks: () => api.request('/my-tasks'),
+    getMyBids: () => api.request('/my-bids'),
 };
 
 // --- AUTHENTICATION CONTROLLER ---
@@ -70,11 +73,14 @@ const authController = {
             router.handleLocation();
         });
     },
-    async handleRegister(email, password) {
+    async handleRegister(form) {
+        const email = form.querySelector('#register-email').value;
+        const password = form.querySelector('#register-password').value;
+        const role = form.querySelector('#register-role').value;
         try {
             const response = await api.publicRequest('/register', {
                 method: 'POST',
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify({ email, password, role })
             });
             showNotification(response.message);
             ui.closeModal();
@@ -175,20 +181,52 @@ const ui = {
                     <label for="register-email" class="block text-sm font-medium text-slate-600 mb-2">Email</label>
                     <input type="email" id="register-email" name="email" required class="form-input">
                 </div>
-                <div class="mb-6">
+                <div class="mb-4">
                     <label for="register-password" class="block text-sm font-medium text-slate-600 mb-2">Password</label>
                     <input type="password" id="register-password" name="password" required class="form-input">
+                </div>
+                <div class="mb-6">
+                    <label for="register-role" class="block text-sm font-medium text-slate-600 mb-2">I am a...</label>
+                    <select id="register-role" name="role" class="form-input">
+                        <option value="seller">Delivery Partner (I want to bid on tasks)</option>
+                        <option value="buyer">Task Poster (I want to post tasks)</option>
+                    </select>
                 </div>
                 <button type="submit" class="btn btn-primary w-full">Create Account</button>
             </form>
             <p class="text-center text-sm text-slate-500 mt-6">Already have an account? <a href="#login" class="nav-link font-semibold text-[#8AA624] hover:underline">Log in here</a></p>
         </div>
     `,
+    BuyerDashboardView: (tasks) => `
+        <div class="fade-in">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="font-heading text-4xl font-bold">My Posted Tasks</h1>
+                <a href="#dashboard/browse" class="nav-link btn btn-secondary">Browse All Tasks</a>
+            </div>
+            <div id="task-list" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                ${tasks.length > 0 ? tasks.map(ui.TaskCard).join('') : ui.EmptyState('inbox', 'You haven\'t posted any tasks yet.', 'Click "Post a Task" to get started!')}
+            </div>
+        </div>
+    `,
+    SellerDashboardView: (tasks) => `
+        <div class="fade-in">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="font-heading text-4xl font-bold">My Bids</h1>
+                <a href="#dashboard/browse" class="nav-link btn btn-secondary">Browse All Tasks</a>
+            </div>
+            <div id="task-list" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                ${tasks.length > 0 ? tasks.map(ui.TaskCard).join('') : ui.EmptyState('gavel', 'You haven\'t bid on any tasks yet.', 'Browse all tasks to find one.')}
+            </div>
+        </div>
+    `,
     DashboardView: (tasks) => `
         <div class="fade-in">
-            <h1 class="font-heading text-4xl font-bold mb-8">Available Tasks</h1>
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="font-heading text-4xl font-bold">Available Tasks</h1>
+                <a href="#dashboard/my-bids" class="nav-link btn btn-secondary">View My Bids</a>
+            </div>
             <div id="task-list" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                ${tasks.length > 0 ? tasks.map(ui.TaskCard).join('') : ui.EmptyState('inbox', 'No tasks yet', 'Why not post the first one?')}
+                ${tasks.length > 0 ? tasks.map(ui.TaskCard).join('') : ui.EmptyState('inbox', 'No tasks yet.', 'Why not post the first one?')}
             </div>
         </div>
     `,
@@ -376,7 +414,7 @@ const router = {
         const path = window.location.hash || '';
         
         const isAuthRoute = path === '#login' || path === '#register';
-        const isProtectedRoute = path === '#dashboard' || path.startsWith('#task-');
+        const isProtectedRoute = path.startsWith('#dashboard') || path.startsWith('#task-');
         if (!state.user && isProtectedRoute) return window.location.hash = '#login';
         if (state.user && (isAuthRoute || path === '')) return window.location.hash = '#dashboard';
 
@@ -389,6 +427,9 @@ const router = {
                 case '#login': ui.render(ui.LoginView()); break;
                 case '#register': ui.render(ui.RegisterView()); break;
                 case '#dashboard': await app.loadDashboard(); break;
+                case '#dashboard/my-tasks': await app.loadMyTasks(); break;
+                case '#dashboard/my-bids': await app.loadMyBids(); break;
+                case '#dashboard/browse': await app.loadBrowseTasks(); break;
                 default: ui.render(ui.WelcomeView());
             }
         }
@@ -419,7 +460,7 @@ const app = {
             e.preventDefault();
             const form = e.target;
             if (form.id === 'login-form') authController.handleLogin(form.email.value, form.password.value);
-            else if (form.id === 'register-form') authController.handleRegister(form.email.value, form.password.value);
+            else if (form.id === 'register-form') authController.handleRegister(form);
             else if (form.id === 'post-task-form') this.handlePostTask(form);
             else if (form.id === 'bid-form') this.handlePostBid(form);
             else if (form.id === 'chat-form') this.handleSendMessage(form);
@@ -428,6 +469,46 @@ const app = {
     },
     
     async loadDashboard() {
+        try {
+            const { data: profile, error } = await supabase.from('users').select('role').eq('id', state.user.id).single();
+            if (error) {
+                // If profile not found, default to seller/browse view
+                if (error.code === 'PGRST116') {
+                    return app.loadBrowseTasks();
+                }
+                throw error;
+            }
+
+            if (profile.role === 'buyer') {
+                window.location.hash = '#dashboard/my-tasks';
+            } else {
+                window.location.hash = '#dashboard/my-bids';
+            }
+        } catch (error) {
+            showNotification(error.message, true);
+            // Fallback to browse tasks if role check fails
+            app.loadBrowseTasks();
+        }
+    },
+    async loadMyTasks() {
+        try {
+            const tasks = await api.getMyTasks();
+            ui.render(ui.BuyerDashboardView(tasks));
+            lucide.createIcons();
+        } catch (error) {
+            showNotification(error.message, true);
+        }
+    },
+    async loadMyBids() {
+        try {
+            const tasks = await api.getMyBids();
+            ui.render(ui.SellerDashboardView(tasks));
+            lucide.createIcons();
+        } catch (error) {
+            showNotification(error.message, true);
+        }
+    },
+    async loadBrowseTasks() {
         try {
             const tasks = await api.publicRequest('/tasks');
             ui.render(ui.DashboardView(tasks));
@@ -469,34 +550,12 @@ const app = {
             await api.request('/tasks', { method: 'POST', body: JSON.stringify(taskData) });
             showNotification('Task posted successfully!');
             ui.closeModal();
-            window.location.hash = '#dashboard';
+            window.location.hash = '#dashboard/my-tasks';
         } catch (error) {
             showNotification(error.message, true);
         }
     },
     
-
-     async initChat(taskId) {
-        const chatBox = document.getElementById('chat-messages');
-        
-        const { data: messages, error } = await supabase.from('messages').select(`*, users(email)`).eq('task_id', taskId).order('created_at');
-        if (error) return showNotification(error.message, true);
-
-        chatBox.innerHTML = messages.map(app.renderMessage).join('');
-        chatBox.scrollTop = chatBox.scrollHeight;
-
-        state.chatSubscription = supabase.channel(`chat:${taskId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `task_id=eq.${taskId}` }, async (payload) => {
-                const { data: newMessage, error } = await supabase.from('messages').select(`*, users(email)`).eq('id', payload.new.id).single();
-                if (error) return;
-                
-                if (!document.getElementById(`msg-${newMessage.id}`)) {
-                    chatBox.insertAdjacentHTML('beforeend', app.renderMessage(newMessage));
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                }
-            })
-            .subscribe();
-    },
     async handlePostBid(form) {
         if (!state.currentTask) return;
         const bidData = {
@@ -539,8 +598,8 @@ const app = {
     subscribeToAllTasks() {
         state.taskSubscription = supabase.channel('public:tasks')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, payload => {
-                if (window.location.hash === '#dashboard') {
-                    app.loadDashboard();
+                if (window.location.hash === '#dashboard/browse') {
+                    app.loadBrowseTasks();
                 }
             }).subscribe();
     },
@@ -569,7 +628,27 @@ const app = {
             .subscribe();
     },
 
-   
+    async initChat(taskId) {
+        const chatBox = document.getElementById('chat-messages');
+        
+        const { data: messages, error } = await supabase.from('messages').select(`*, users(email)`).eq('task_id', taskId).order('created_at');
+        if (error) return showNotification(error.message, true);
+
+        chatBox.innerHTML = messages.map(app.renderMessage).join('');
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        state.chatSubscription = supabase.channel(`chat:${taskId}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `task_id=eq.${taskId}` }, async (payload) => {
+                const { data: newMessage, error } = await supabase.from('messages').select(`*, users(email)`).eq('id', payload.new.id).single();
+                if (error) return;
+                
+                if (!document.getElementById(`msg-${newMessage.id}`)) {
+                    chatBox.insertAdjacentHTML('beforeend', app.renderMessage(newMessage));
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            })
+            .subscribe();
+    },
 
     async handleSendMessage(form) {
         const input = form.querySelector('input');
@@ -652,3 +731,7 @@ function showNotification(message, isError = false) {
 window.app = { handleAcceptBid: app.handleAcceptBid };
 window.ui = { closeModal: ui.closeModal };
 app.init();
+
+
+
+
