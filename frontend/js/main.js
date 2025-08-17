@@ -672,7 +672,36 @@ const app = {
             showNotification(error.message, true);
         }
     },
-    
+    subscribeToNotifications() {
+        if (!state.user) return;
+
+        const notificationCount = document.getElementById('notification-count');
+        const notificationList = document.getElementById('notification-list');
+
+        const fetchAndRenderNotifications = async () => {
+            const { data, error } = await supabase.from('notifications').select('*').eq('is_read', false).eq('user_id', state.user.id);
+            
+            if (data && data.length > 0) {
+                notificationCount.textContent = data.length;
+                notificationCount.classList.remove('hidden');
+                notificationList.innerHTML = data.map(n => `<a href="${n.link}" class="block p-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">${n.message}</a>`).join('');
+            } else {
+                notificationCount.classList.add('hidden');
+                // *** FIX: Display a clear message when there are no notifications ***
+                notificationList.innerHTML = `<p class="p-4 text-sm text-center text-slate-500">You're all caught up!</p>`;
+            }
+        };
+
+        // Fetch initial notifications
+        fetchAndRenderNotifications();
+
+        // Listen for new notifications in real-time
+        state.notificationSubscription = supabase.channel('public:notifications')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${state.user.id}` }, payload => {
+                showNotification("You have a new notification!");
+                fetchAndRenderNotifications(); // Re-fetch and render all notifications
+            }).subscribe();
+    },
     async handlePostBid(form) {
         if (!state.currentTask) return;
         const bidData = {
@@ -712,32 +741,8 @@ const app = {
         }
     },
     // Add this new function inside the main 'app' object
-subscribeToNotifications() {
-    if (!state.user) return; // Don't run if the user isn't logged in
 
-    const notificationCount = document.getElementById('notification-count');
-    const notificationList = document.getElementById('notification-list');
 
-    // Fetch initial unread notifications
-    supabase.from('notifications').select('*').eq('is_read', false).eq('user_id', state.user.id).then(({ data, error }) => {
-        if (data && data.length > 0) {
-            notificationCount.textContent = data.length;
-            notificationCount.classList.remove('hidden');
-            notificationList.innerHTML = data.map(n => `<a href="${n.link}" class="block p-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">${n.message}</a>`).join('');
-        } else {
-            notificationCount.classList.add('hidden');
-            notificationList.innerHTML = `<p class="p-2 text-sm text-slate-500">No new notifications.</p>`;
-        }
-    });
-
-    // Listen for new notifications in real-time
-    supabase.channel('public:notifications')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${state.user.id}` }, payload => {
-            showNotification("You have a new notification!");
-            // Simple reload of notifications on new event
-            this.subscribeToNotifications();
-        }).subscribe();
-},
       async handleUpdateProfile(form) {
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
