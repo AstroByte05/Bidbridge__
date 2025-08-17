@@ -1,623 +1,99 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+// js/main.js
 
-// --- CONFIGURATION ---
-const API_BASE_URL = 'http://127.0.0.1:5000'; // Your Python server
-const SUPABASE_URL = 'https://blmskxmzqaanstasqfpy.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJsbXNreG16cWFhbnN0YXNxZnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0OTU0NzQsImV4cCI6MjA3MDA3MTQ3NH0.5qSBIpjJOZLWT1ToWoX4Fy_-gIaW1V_sC9xtca6cHvA';
-// --- INITIALIZATION ---
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// --- MODULE IMPORTS ---
+// This file is now the main entry point that orchestrates all the other modules.
+import { state } from './state.js';
+import { api, supabase } from './api.js';
+import { ui, showNotification } from './ui.js';
+import { authController } from './auth.js';
+import { router } from './router.js';
 
-
-// --- GLOBAL STATE ---
-const state = {
-    user: null,
-    currentTask: null,
-    taskSubscription: null,
-    bidSubscription: null,
-    chatSubscription: null,
-};
-
-// --- UI ELEMENTS ---
-const mainContent = document.getElementById('main-content');
-const userMenu = document.getElementById('user-menu');
-const authLinks = document.getElementById('auth-links');
-const userEmailEl = document.getElementById('user-email');
-const userAvatar = document.getElementById('user-avatar');
-const mobileMenu = document.getElementById('mobile-menu');
-const modalContainer = document.getElementById('modal-container');
-const modalContent = document.getElementById('modal-content');
-
-// --- API HELPERS ---
-const api = {
-    async request(endpoint, options = {}) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("User not logged in.");
-        
-        const headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-            ...options.headers,
-        };
-        
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-        
-        const responseData = await response.json();
-        if (!response.ok) {
-            throw new Error(responseData.error || `HTTP error! status: ${response.status}`);
-        }
-        return responseData;
-    },
-    async publicRequest(endpoint, options = {}) {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            ...options,
-            headers: { 'Content-Type': 'application/json', ...options.headers },
-        });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    },
-    suggestDescription: (title) => api.request('/suggest-description', { method: 'POST', body: JSON.stringify({ title }) }),
-    deleteTask: (taskId) => api.request(`/tasks/${taskId}`, { method: 'DELETE' }),
-    getMyTasks: () => api.request('/my-tasks'),
-    getMyBids: () => api.request('/my-bids'),
-    // *** NEW: API functions for profile management ***
-    getProfile: () => api.request('/profile'),
-    updateProfile: (data) => api.request('/profile', { method: 'PUT', body: JSON.stringify(data) }),
-};
-
-// --- AUTHENTICATION CONTROLLER ---
-const authController = {
-    init() {
-        supabase.auth.onAuthStateChange((event, session) => {
-            state.user = session?.user ?? null;
-            this.updateUI(state.user);
-            router.handleLocation();
-        });
-    },
-    async handleRegister(form) {
-        const email = form.querySelector('#register-email').value;
-        const password = form.querySelector('#register-password').value;
-        const role = form.querySelector('#register-role').value;
-        try {
-            const response = await api.publicRequest('/register', {
-                method: 'POST',
-                body: JSON.stringify({ email, password, role })
-            });
-            showNotification(response.message);
-            ui.closeModal();
-            window.location.hash = '#login';
-        } catch (error) {
-            showNotification(error.message, true);
-        }
-    },
-    async handleLogin(email, password) {
-        try {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) throw error;
-        } catch (error) {
-            showNotification(error.message, true);
-        }
-    },
-    async handleLogout() {
-        try {
-            const { error } = await supabase.auth.signOut();
-            if (error) throw error;
-            state.user = null;
-            state.profile = null; // Clear profile on logout
-            window.location.hash = '#login';
-        } catch (error) {
-            showNotification(error.message, true);
-        }
-    },
-    updateUI(user) {
-        if (user) {
-            authLinks.classList.add('hidden');
-            userMenu.classList.remove('hidden');
-            userEmailEl.textContent = user.email;
-            userAvatar.src = `https://placehold.co/40x40/DBE4C9/8AA624?text=${user.email[0].toUpperCase()}`;
-        } else {
-            authLinks.classList.remove('hidden');
-            userMenu.classList.add('hidden');
-            userEmailEl.textContent = '';
-        }
-        this.updateMobileMenu(user);
-    },
-    updateMobileMenu(user) {
-        mobileMenu.innerHTML = '';
-        if (user) {
-            mobileMenu.innerHTML = `
-                <a href="#profile" class="nav-link btn btn-secondary w-full">My Profile</a>
-                <button id="mobile-post-task-btn" class="btn btn-primary w-full">Post a Task</button>
-                <button id="mobile-logout-btn" class="btn btn-secondary w-full">Logout</button>
-            `;
-        } else {
-            mobileMenu.innerHTML = `
-                <a href="#login" class="nav-link btn btn-secondary w-full">Log In</a>
-                <a href="#register" class="nav-link btn btn-primary w-full">Register</a>
-            `;
-        }
-    }
-};
-
-// --- UI & RENDERING ---
-const ui = {
-    render(html) {
-        mainContent.innerHTML = html;
-        lucide.createIcons();
-    },
-    createStaggeredTitle(text) {
-        return text.split('').map((letter, index) =>
-            `<span class="stagger-letter" style="animation-delay: ${index * 40}ms">${letter === ' ' ? '&nbsp;' : letter}</span>`
-        ).join('');
-    },
-    WelcomeView: () => `
-        <div class="text-center py-16 md:py-24 fade-in">
-            <h1 class="text-5xl md:text-7xl font-heading font-bold mb-4">${ui.createStaggeredTitle('Fast. Local. Trusted.')}</h1>
-            <p class="text-lg text-slate-600 max-w-2xl mx-auto mb-8">Your community's marketplace for getting things done. Post a task and get bids from trusted locals in minutes.</p>
-            <div><a href="#register" class="nav-link btn btn-primary">Get Started Now</a></div>
-        </div>
-    `,
-    LoginView: () => `
-        <div class="max-w-md mx-auto mt-12 bg-white p-8 rounded-2xl shadow-lg fade-in">
-            <h2 class="font-heading text-3xl font-bold text-center mb-2">Welcome Back!</h2>
-            <p class="text-center text-slate-500 mb-8">Log in to manage your tasks.</p>
-            <form id="login-form">
-                <div class="mb-4">
-                    <label for="login-email" class="block text-sm font-medium text-slate-600 mb-2">Email</label>
-                    <input type="email" id="login-email" name="email" required class="form-input">
-                </div>
-                <div class="mb-6">
-                    <label for="login-password" class="block text-sm font-medium text-slate-600 mb-2">Password</label>
-                    <input type="password" id="login-password" name="password" required class="form-input">
-                </div>
-                <button type="submit" class="btn btn-primary w-full">Log In</button>
-            </form>
-            <p class="text-center text-sm text-slate-500 mt-6">Don't have an account? <a href="#register" class="nav-link font-semibold text-[#8AA624] hover:underline">Register here</a></p>
-        </div>
-    `,
-    RegisterView: () => `
-        <div class="max-w-md mx-auto mt-12 bg-white p-8 rounded-2xl shadow-lg fade-in">
-            <h2 class="font-heading text-3xl font-bold text-center mb-2">Join BidBridge</h2>
-            <p class="text-center text-slate-500 mb-8">Create an account to post and bid on tasks.</p>
-            <form id="register-form">
-                <div class="mb-4">
-                    <label for="register-email" class="block text-sm font-medium text-slate-600 mb-2">Email</label>
-                    <input type="email" id="register-email" name="email" required class="form-input">
-                </div>
-                <div class="mb-4">
-                    <label for="register-password" class="block text-sm font-medium text-slate-600 mb-2">Password</label>
-                    <input type="password" id="register-password" name="password" required class="form-input">
-                </div>
-                <div class="mb-6">
-                    <label for="register-role" class="block text-sm font-medium text-slate-600 mb-2">I am a...</label>
-                    <select id="register-role" name="role" class="form-input">
-                        <option value="seller">Delivery Partner (I want to bid on tasks)</option>
-                        <option value="buyer">Task Poster (I want to post tasks)</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-primary w-full">Create Account</button>
-            </form>
-            <p class="text-center text-sm text-slate-500 mt-6">Already have an account? <a href="#login" class="nav-link font-semibold text-[#8AA624] hover:underline">Log in here</a></p>
-        </div>
-    `,
-    BuyerDashboardView: (tasks) => `
-        <div class="fade-in">
-            <div class="flex justify-between items-center mb-8">
-                <h1 class="font-heading text-4xl font-bold">My Posted Tasks</h1>
-                <a href="#dashboard/browse" class="nav-link btn btn-secondary">Browse All Tasks</a>
-            </div>
-            <div id="task-list" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                ${tasks.length > 0 ? tasks.map(ui.TaskCard).join('') : ui.EmptyState('inbox', 'You haven\'t posted any tasks yet.', 'Click "Post a Task" to get started!')}
-            </div>
-        </div>
-    `,
-    SellerDashboardView: (tasks) => `
-        <div class="fade-in">
-            <div class="flex justify-between items-center mb-8">
-                <h1 class="font-heading text-4xl font-bold">My Bids</h1>
-                <a href="#dashboard/browse" class="nav-link btn btn-secondary">Browse All Tasks</a>
-            </div>
-            <div id="task-list" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                ${tasks.length > 0 ? tasks.map(ui.TaskCard).join('') : ui.EmptyState('gavel', 'You haven\'t bid on any tasks yet.', 'Browse all tasks to find one.')}
-            </div>
-        </div>
-    `,
-    DashboardView: (tasks) => `
-        <div class="fade-in">
-            <div class="flex justify-between items-center mb-8">
-                <h1 class="font-heading text-4xl font-bold">Available Tasks</h1>
-                <a href="#dashboard/my-bids" class="nav-link btn btn-secondary">View My Bids</a>
-            </div>
-            <div id="task-list" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                ${tasks.length > 0 ? tasks.map(ui.TaskCard).join('') : ui.EmptyState('inbox', 'No tasks yet.', 'Why not post the first one?')}
-            </div>
-        </div>
-    `,
-    TaskCard: (task) => {
-        const now = new Date();
-        const expires = new Date(task.expires_at);
-        const isUrgent = task.expires_at && expires > now;
-        const urgentClass = isUrgent ? 'urgent-task' : '';
-
-        return `
-        <a href="#task-${task.id}" class="nav-link task-card bg-white rounded-2xl shadow-md p-6 border-2 border-slate-200/80 ${urgentClass}" id="task-card-${task.id}">
-            <div class="flex justify-between items-start">
-                <h3 class="font-heading text-xl font-bold mb-2 pr-4">${task.title}</h3>
-                <div class="text-right">
-                    <span class="font-bold text-lg text-[#8AA624]">₹${task.budget}</span>
-                    ${isUrgent ? `<span class="block mt-1 text-xs font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-800">🔥 Urgent</span>` : ''}
-                </div>
-            </div>
-            <p class="text-slate-500 mb-4 h-12 overflow-hidden">${task.description}</p>
-            <div class="flex items-center text-sm text-slate-500 mt-4 pt-4 border-t">
-                <i data-lucide="map-pin" class="h-4 w-4 mr-2"></i>
-                <span>${task.from_location} to ${task.to_location}</span>
-            </div>
-        </a>
-    `;
-    },
-    TaskDetailView: (task, bids) => {
-        const isOwner = task.poster_id === state.user?.id;
-        return `
-        <div class="fade-in">
-            <a href="#dashboard" class="nav-link btn btn-secondary mb-6"><i data-lucide="arrow-left"></i>Back</a>
-            <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8">
-                <div class="flex flex-col md:flex-row justify-between items-start gap-4">
-                    <div>
-                        <h2 class="font-heading text-4xl font-bold">${task.title}</h2>
-                        <p class="text-slate-500 mt-2">Posted by ${task.users.email}</p>
-                    </div>
-                    <div class="text-right flex-shrink-0">
-                        <div class="font-bold text-2xl text-[#8AA624]">₹${task.budget}</div>
-                        <span class="text-sm font-semibold px-3 py-1 rounded-full mt-2 inline-block ${task.status === 'open' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}">${task.status}</span>
-                    </div>
-                </div>
-                
-                ${isOwner ? `
-                <div class="mt-6 p-4 border-l-4 border-red-400 bg-red-50 rounded-r-lg">
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <i data-lucide="shield-alert" class="h-5 w-5 text-red-500"></i>
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm text-red-700">
-                                You are the owner of this task.
-                                <button id="delete-task-btn" class="ml-2 font-medium underline hover:text-red-600">Delete this task</button>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
-
-                <div class="grid lg:grid-cols-2 gap-8 mt-8">
-                    <div id="bids-section">
-                        <h3 class="font-heading text-2xl font-semibold mb-4">Bids</h3>
-                        <div id="bids-list" class="space-y-4">
-                            ${bids.length > 0 ? bids.map(bid => ui.BidCard(bid, task)).join('') : ui.EmptyState('gavel', 'No bids yet', 'Be the first!')}
-                        </div>
-                        ${(task.status === 'open' && !isOwner) ? ui.BidForm() : ''}
-                    </div>
-                    <div id="chat-section" class="${task.status === 'assigned' ? '' : 'hidden'}">
-                        <h3 class="font-heading text-2xl font-semibold mb-4">Chat</h3>
-                        <div id="chat-messages" class="chat-box"></div>
-                        <form id="chat-form" class="flex gap-2 mt-4">
-                            <input type="text" id="chat-message-input" class="form-input flex-grow" placeholder="Type a message...">
-                            <button type="submit" class="btn btn-primary"><i data-lucide="send"></i></button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `},
-    BidCard: (bid, task) => {
-        const isOwner = task.poster_id === state.user?.id;
-        const isAccepted = task.accepted_bid_id === bid.id;
-        return `
-        <div class="p-4 rounded-lg flex justify-between items-center transition-all ${isAccepted ? 'bg-blue-100 border-blue-300' : 'bg-slate-50 border-slate-200'} border" id="bid-${bid.id}">
-            <div>
-                <p class="font-semibold text-slate-800">${bid.users.email}</p>
-                <p class="text-sm text-slate-500">ETA: ${bid.time_estimate}</p>
-            </div>
-            <div class="text-right">
-                <p class="text-xl font-bold text-slate-800">₹${bid.amount}</p>
-                ${(isOwner && task.status === 'open') ? `<button class="btn btn-secondary text-xs py-1 px-2 mt-1" data-bid-id="${bid.id}" onclick="app.handleAcceptBid(${task.id}, ${bid.id})">Accept</button>` : ''}
-                ${isAccepted ? `<span class="text-xs font-bold text-blue-800 block mt-1">ACCEPTED</span>` : ''}
-            </div>
-        </div>
-    `},
-    BidForm: () => `
-        <form id="bid-form" class="mt-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <h4 class="font-semibold mb-3">Place Your Bid</h4>
-            <div class="grid sm:grid-cols-2 gap-3">
-                <input type="number" id="bid-amount" name="amount" placeholder="Price (₹)" required class="form-input">
-                <input type="text" id="bid-eta" name="timeEstimate" placeholder="ETA (e.g., 2 days)" required class="form-input">
-            </div>
-            <button type="submit" class="btn btn-primary w-full mt-3">Submit Bid</button>
-        </form>
-    `,
-    PostTaskModal: () => `
-        <div class="p-8">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="font-heading text-3xl font-bold">Post a New Task</h2>
-                <button onclick="ui.closeModal()" class="p-2 rounded-full hover:bg-slate-100"><i data-lucide="x"></i></button>
-            </div>
-            <form id="post-task-form">
-                <div class="mb-4">
-                    <label for="task-title" class="block text-sm font-medium text-slate-600 mb-2">Title</label>
-                    <input type="text" id="task-title" name="title" required class="form-input" placeholder="e.g., Deliver a fragile vase">
-                </div>
-                 <div class="mb-4">
-                    <div class="flex justify-between items-center mb-2">
-                        <label for="task-description" class="block text-sm font-medium text-slate-600">Description</label>
-                        <button type="button" id="suggest-details-btn" class="btn btn-secondary text-xs py-1 px-2">
-                            <i data-lucide="sparkles" class="h-4 w-4"></i> Suggest Details
-                        </button>
-                    </div>
-                    <textarea id="task-description" name="description" required rows="4" class="form-input" placeholder="Provide details or click 'Suggest Details' for a template."></textarea>
-                </div>
-                <div class="grid sm:grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label for="task-from" class="block text-sm font-medium text-slate-600 mb-2">From (City)</label>
-                        <input type="text" id="task-from" name="from_location" required class="form-input" placeholder="e.g., Yeola">
-                    </div>
-                     <div>
-                        <label for="task-to" class="block text-sm font-medium text-slate-600 mb-2">To (City)</label>
-                        <input type="text" id="task-to" name="to_location" required class="form-input" placeholder="e.g., Nashik">
-                    </div>
-                </div>
-                 <div class="mb-4">
-                    <label for="task-budget" class="block text-sm font-medium text-slate-600 mb-2">Budget (₹)</label>
-                    <input type="number" id="task-budget" name="budget" required class="form-input" placeholder="e.g., 2000">
-                </div>
-                <div class="flex items-center mb-6">
-                    <input id="task-urgent" name="is_urgent" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-[#8AA624] focus:ring-[#8AA624]">
-                    <label for="task-urgent" class="ml-2 block text-sm text-slate-900">
-                        Urgent? <span class="text-slate-500">(Task will expire in 24 hours and be highlighted)</span>
-                    </label>
-                </div>
-                <button type="submit" class="btn btn-primary w-full">Post Task</button>
-            </form>
-        </div>
-    `,
-    EmptyState: (icon, title, text) => `
-        <div class="col-span-full text-center py-16 bg-white/80 rounded-lg">
-            <i data-lucide="${icon}" class="mx-auto h-12 w-12 text-slate-400"></i>
-            <h3 class="mt-2 text-lg font-medium">${title}</h3>
-            <p class="mt-1 text-sm text-slate-500">${text}</p>
-        </div>
-    `,
-
-   // *** NEW: Profile View for Verification ***
-    ProfileView: (profile) => {
-        const isSeller = profile.role === 'seller';
-        let verificationContent = '';
-
-        switch (profile.verification_status) {
-            case 'unverified':
-                verificationContent = `
-                    <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <h4 class="font-semibold text-yellow-800">Complete Your Verification</h4>
-                        <p class="text-sm text-yellow-700 mt-1">To increase trust and get more bids, please complete your profile and upload a verification document.</p>
-                    </div>
-                `;
-                break;
-            case 'pending':
-                verificationContent = `
-                    <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h4 class="font-semibold text-blue-800">Verification Pending</h4>
-                        <p class="text-sm text-blue-700 mt-1">Your document has been submitted and is awaiting admin approval. This usually takes 1-2 business days.</p>
-                    </div>
-                `;
-                break;
-            case 'verified':
-                verificationContent = `
-                    <div class="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
-                        <i data-lucide="shield-check" class="h-6 w-6 text-green-600"></i>
-                        <div>
-                            <h4 class="font-semibold text-green-800">You are Verified!</h4>
-                            <p class="text-sm text-green-700">Task posters will now see a verified badge next to your bids.</p>
-                        </div>
-                    </div>
-                `;
-                break;
-        }
-
-        return `
-        <div class="fade-in max-w-4xl mx-auto">
-            <h1 class="font-heading text-4xl font-bold mb-8">My Profile</h1>
-            <div class="bg-white p-8 rounded-2xl shadow-lg">
-                <form id="profile-form">
-                    <div class="grid md:grid-cols-2 gap-6">
-                        <div>
-                            <label for="profile-email" class="block text-sm font-medium text-slate-600 mb-2">Email</label>
-                            <input type="email" id="profile-email" value="${profile.email}" disabled class="form-input bg-slate-100 cursor-not-allowed">
-                        </div>
-                        <div>
-                            <label for="profile-role" class="block text-sm font-medium text-slate-600 mb-2">Account Type</label>
-                            <input type="text" id="profile-role" value="${profile.role === 'buyer' ? 'Task Poster' : 'Delivery Partner'}" disabled class="form-input bg-slate-100 cursor-not-allowed">
-                        </div>
-                        <div>
-                            <label for="profile-name" class="block text-sm font-medium text-slate-600 mb-2">Full Name</label>
-                            <input type="text" id="profile-name" name="full_name" value="${profile.full_name || ''}" class="form-input">
-                        </div>
-                        <div>
-                            <label for="profile-phone" class="block text-sm font-medium text-slate-600 mb-2">Phone Number</label>
-                            <input type="tel" id="profile-phone" name="phone_number" value="${profile.phone_number || ''}" class="form-input">
-                        </div>
-                    </div>
-                    <div class="mt-6">
-                        <button type="submit" class="btn btn-primary">Save Profile</button>
-                    </div>
-                </form>
-
-                ${isSeller ? `
-                <hr class="my-8">
-                <div>
-                    <h3 class="font-heading text-2xl font-semibold mb-4">Verification Status</h3>
-                    ${verificationContent}
-                    ${profile.verification_status !== 'verified' ? `
-                    <form id="verification-form" class="mt-6">
-                        <div>
-                            <label for="verification-doc" class="block text-sm font-medium text-slate-600 mb-2">Upload Verification Document</label>
-                            <input type="file" id="verification-doc" required class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"/>
-                            <p class="text-xs text-slate-500 mt-1">e.g., Aadhaar Card, Driver's License. Max file size 5MB.</p>
-                        </div>
-                        <div class="mt-4">
-                            <button type="submit" class="btn btn-secondary">Upload and Submit for Review</button>
-                        </div>
-                    </form>
-                    ` : ''}
-                </div>
-                ` : ''}
-            </div>
-        </div>
-        `;
-    },
-
-    openModal(html) {
-        modalContent.innerHTML = html;
-        lucide.createIcons();
-        modalContainer.classList.remove('hidden');
-        modalContainer.classList.add('flex');
-        setTimeout(() => {
-            modalContent.classList.remove('scale-95', 'opacity-0');
-        }, 10);
-    },
-    closeModal() {
-        modalContent.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => {
-            modalContainer.classList.add('hidden');
-            modalContainer.classList.remove('flex');
-            modalContent.innerHTML = '';
-        }, 300);
-    },
-};
-
-const router = {
-    cleanup() {
-        if (state.taskSubscription) supabase.removeChannel(state.taskSubscription);
-        if (state.bidSubscription) supabase.removeChannel(state.bidSubscription);
-        if (state.chatSubscription) supabase.removeChannel(state.chatSubscription);
-    },
-    async handleLocation() {
-        this.cleanup();
-        const path = window.location.hash || '';
-        
-        const isAuthRoute = path === '#login' || path === '#register';
-        const isProtectedRoute = path.startsWith('#dashboard') || path.startsWith('#task-') || path === '#profile';
-        if (!state.user && isProtectedRoute) return window.location.hash = '#login';
-        if (state.user && (isAuthRoute || path === '')) return window.location.hash = '#dashboard';
-
-        if (path.startsWith('#task-')) {
-            const taskId = parseInt(path.substring(6));
-            await app.loadTaskDetail(taskId);
-        } else {
-            switch (path) {
-                case '': ui.render(ui.WelcomeView()); break;
-                case '#login': ui.render(ui.LoginView()); break;
-                case '#register': ui.render(ui.RegisterView()); break;
-                case '#dashboard': await app.loadDashboard(); break;
-                case '#dashboard/my-tasks': await app.loadMyTasks(); break;
-                case '#dashboard/my-bids': await app.loadMyBids(); break;
-                case '#dashboard/browse': await app.loadBrowseTasks(); break;
-                // *** NEW: Route for the profile page ***
-                case '#profile': await app.loadProfile(); break;
-                default: ui.render(ui.WelcomeView());
-            }
-        }
-    }
-};
 // --- MAIN APP CONTROLLER ---
-const app = {
+// This object contains the core application logic that isn't related to auth or routing.
+export const app = {
     init() {
+        // Start the authentication listener.
         authController.init();
+        // Set up all the global event listeners for the application.
         this.addEventListeners();
     },
-   addEventListeners() {
-    document.body.addEventListener('click', e => {
-        const navLink = e.target.closest('.nav-link');
-        if (navLink) {
-            e.preventDefault();
-            const newHash = new URL(navLink.href).hash;
-            if (window.location.hash !== newHash) window.location.hash = newHash;
-        }
-        if (e.target.closest('#logout-btn') || e.target.closest('#mobile-logout-btn')) authController.handleLogout();
-        if (e.target.closest('#post-task-btn') || e.target.closest('#mobile-post-task-btn')) ui.openModal(ui.PostTaskModal());
-        if (e.target.closest('#mobile-menu-btn')) mobileMenu.classList.toggle('hidden');
-        if (e.target.closest('#suggest-details-btn')) this.handleAiSuggest(e.target.closest('#suggest-details-btn'));
-        if (e.target.closest('#delete-task-btn')) this.handleDeleteTask();
 
-        // *** FIX: Added event listener for the notification bell ***
-        const bell = e.target.closest('#notification-bell');
-        const notificationList = document.getElementById('notification-list');
-        if (bell) {
-            notificationList.classList.toggle('hidden');
-        } else if (!e.target.closest('#notification-list')) {
-            notificationList.classList.add('hidden');
-        }
-    });
-    document.body.addEventListener('submit', e => {
-        e.preventDefault();
-        const form = e.target;
-        if (form.id === 'login-form') authController.handleLogin(form.email.value, form.password.value);
-        else if (form.id === 'register-form') authController.handleRegister(form);
-        else if (form.id === 'post-task-form') this.handlePostTask(form);
-        else if (form.id === 'bid-form') this.handlePostBid(form);
-        else if (form.id === 'chat-form') this.handleSendMessage(form);
-        else if (form.id === 'profile-form') this.handleUpdateProfile(form);
-        else if (form.id === 'verification-form') this.handleVerificationUpload(form);
-    });
-    window.addEventListener('hashchange', () => router.handleLocation());
-},
-    
- async loadDashboard() {
-    try {
-        const { data: profile, error } = await supabase.from('users').select('role').eq('id', state.user.id).single();
-        if (error) {
-            if (error.code === 'PGRST116') { // Profile not found, default to seller/browse view
-                return app.loadBrowseTasks();
+    addEventListeners() {
+        document.body.addEventListener('click', e => {
+            const navLink = e.target.closest('.nav-link');
+            if (navLink) {
+                e.preventDefault();
+                const newHash = new URL(navLink.href).hash;
+                if (window.location.hash !== newHash) window.location.hash = newHash;
             }
-            throw error;
-        }
+            if (e.target.closest('#logout-btn') || e.target.closest('#mobile-logout-btn')) authController.handleLogout();
+            if (e.target.closest('#post-task-btn') || e.target.closest('#mobile-post-task-btn')) ui.openModal(ui.PostTaskModal());
+            if (e.target.closest('#mobile-menu-btn')) document.getElementById('mobile-menu').classList.toggle('hidden');
+            if (e.target.closest('#suggest-details-btn')) this.handleAiSuggest(e.target.closest('#suggest-details-btn'));
+            if (e.target.closest('#delete-task-btn')) this.handleDeleteTask();
+        });
 
-        // *** FIX: Subscribe to notifications when the dashboard loads ***
-        app.subscribeToNotifications();
+        document.body.addEventListener('submit', e => {
+            e.preventDefault();
+            const form = e.target;
+            if (form.id === 'login-form') authController.handleLogin(form.email.value, form.password.value);
+            else if (form.id === 'register-form') authController.handleRegister(form);
+            else if (form.id === 'post-task-form') this.handlePostTask(form);
+            else if (form.id === 'bid-form') this.handlePostBid(form);
+            else if (form.id === 'chat-form') this.handleSendMessage(form);
+            else if (form.id === 'profile-form') this.handleUpdateProfile(form);
+            else if (form.id === 'verification-form') this.handleVerificationUpload(form);
+        });
 
-        if (profile.role === 'buyer') {
-            window.location.hash = '#dashboard/my-tasks';
-        } else {
-            window.location.hash = '#dashboard/my-bids';
+        window.addEventListener('hashchange', () => router.handleLocation());
+    },
+    
+    // --- DATA LOADING FUNCTIONS (Called by the router) ---
+    async loadDashboard() {
+        try {
+            const { data: profile, error } = await supabase.from('users').select('role').eq('id', state.user.id).single();
+            if (error) {
+                if (error.code === 'PGRST116') {
+                    return app.loadBrowseTasks();
+                }
+                throw error;
+            }
+            
+            app.subscribeToNotifications();
+
+            if (profile.role === 'buyer') {
+                window.location.hash = '#dashboard/my-tasks';
+            } else {
+                window.location.hash = '#dashboard/my-bids';
+            }
+        } catch (error) {
+            showNotification(error.message, true);
+            app.loadBrowseTasks();
         }
-    } catch (error) {
-        showNotification(error.message, true);
-        app.loadBrowseTasks(); // Fallback to browse tasks if role check fails
-    }
-},
+    },
+
     async loadMyTasks() {
         try {
             const tasks = await api.getMyTasks();
             ui.render(ui.BuyerDashboardView(tasks));
-            lucide.createIcons();
         } catch (error) {
             showNotification(error.message, true);
         }
     },
+
     async loadMyBids() {
         try {
             const tasks = await api.getMyBids();
             ui.render(ui.SellerDashboardView(tasks));
-            lucide.createIcons();
         } catch (error) {
             showNotification(error.message, true);
         }
     },
+
     async loadBrowseTasks() {
         try {
             const tasks = await api.publicRequest('/tasks');
             ui.render(ui.DashboardView(tasks));
-            lucide.createIcons();
             app.subscribeToAllTasks();
         } catch (error) {
             showNotification(error.message, true);
@@ -629,11 +105,8 @@ const app = {
             const { task, bids } = await api.publicRequest(`/tasks/${taskId}`);
             state.currentTask = task;
             ui.render(ui.TaskDetailView(task, bids));
-            lucide.createIcons();
             
-            if (task.status === 'assigned') {
-                app.initChat(taskId);
-            }
+            if (task.status === 'assigned') app.initChat(taskId);
             
             app.subscribeToBids(taskId);
             app.subscribeToTaskUpdates(taskId);
@@ -642,18 +115,17 @@ const app = {
         }
     },
 
- async loadProfile() {
+    async loadProfile() {
         try {
             const profile = await api.getProfile();
             state.profile = profile;
             ui.render(ui.ProfileView(profile));
-            lucide.createIcons();
         } catch (error) {
             showNotification(error.message, true);
         }
     },
 
-
+    // --- ACTION HANDLERS (Called by event listeners) ---
     async handlePostTask(form) {
         const taskData = {
             title: form.querySelector('#task-title').value,
@@ -672,36 +144,7 @@ const app = {
             showNotification(error.message, true);
         }
     },
-    subscribeToNotifications() {
-        if (!state.user) return;
-
-        const notificationCount = document.getElementById('notification-count');
-        const notificationList = document.getElementById('notification-list');
-
-        const fetchAndRenderNotifications = async () => {
-            const { data, error } = await supabase.from('notifications').select('*').eq('is_read', false).eq('user_id', state.user.id);
-            
-            if (data && data.length > 0) {
-                notificationCount.textContent = data.length;
-                notificationCount.classList.remove('hidden');
-                notificationList.innerHTML = data.map(n => `<a href="${n.link}" class="block p-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">${n.message}</a>`).join('');
-            } else {
-                notificationCount.classList.add('hidden');
-                // *** FIX: Display a clear message when there are no notifications ***
-                notificationList.innerHTML = `<p class="p-4 text-sm text-center text-slate-500">You're all caught up!</p>`;
-            }
-        };
-
-        // Fetch initial notifications
-        fetchAndRenderNotifications();
-
-        // Listen for new notifications in real-time
-        state.notificationSubscription = supabase.channel('public:notifications')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${state.user.id}` }, payload => {
-                showNotification("You have a new notification!");
-                fetchAndRenderNotifications(); // Re-fetch and render all notifications
-            }).subscribe();
-    },
+    
     async handlePostBid(form) {
         if (!state.currentTask) return;
         const bidData = {
@@ -740,10 +183,8 @@ const app = {
             }
         }
     },
-    // Add this new function inside the main 'app' object
 
-
-      async handleUpdateProfile(form) {
+    async handleUpdateProfile(form) {
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
         try {
@@ -753,6 +194,7 @@ const app = {
             showNotification(error.message, true);
         }
     },
+
     async handleVerificationUpload(form) {
         const docFile = form.querySelector('#verification-doc').files[0];
         if (!docFile) return showNotification('Please select a file to upload.', true);
@@ -763,26 +205,20 @@ const app = {
         lucide.createIcons();
 
         try {
-            // Create a unique file path
             const filePath = `${state.user.id}/${Date.now()}-${docFile.name}`;
             
-            // Upload the file to Supabase Storage
             const { error: uploadError } = await supabase.storage
                 .from('verification-documents')
                 .upload(filePath, docFile);
-
             if (uploadError) throw uploadError;
 
-            // Get the public URL of the uploaded file
             const { data: { publicUrl } } = supabase.storage
                 .from('verification-documents')
                 .getPublicUrl(filePath);
             
-            // Update the user's profile with the document URL
             await api.updateProfile({ document_url: publicUrl });
-
             showNotification('Document uploaded! Your profile is now pending review.');
-            this.loadProfile(); // Refresh the profile view
+            this.loadProfile();
 
         } catch (error) {
             showNotification(error.message, true);
@@ -792,7 +228,32 @@ const app = {
         }
     },
 
+    async handleAiSuggest(button) {
+        const titleInput = document.getElementById('task-title');
+        const descriptionInput = document.getElementById('task-description');
+        const title = titleInput.value;
 
+        if (!title) return showNotification('Please enter a task title first.', true);
+
+        button.disabled = true;
+        button.innerHTML = `<i data-lucide="loader" class="animate-spin h-4 w-4"></i> Thinking...`;
+        lucide.createIcons();
+
+        try {
+            const { suggestion } = await api.suggestDescription(title);
+            descriptionInput.value = suggestion;
+            descriptionInput.style.height = 'auto';
+            descriptionInput.style.height = descriptionInput.scrollHeight + 'px';
+        } catch (error) {
+            showNotification(error.message, true);
+        } finally {
+            button.disabled = false;
+            button.innerHTML = `<i data-lucide="sparkles" class="h-4 w-4"></i> Suggest Details`;
+            lucide.createIcons();
+        }
+    },
+    
+    // --- REAL-TIME SUBSCRIPTIONS ---
     subscribeToAllTasks() {
         state.taskSubscription = supabase.channel('public:tasks')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, payload => {
@@ -824,6 +285,34 @@ const app = {
                 }
             })
             .subscribe();
+    },
+
+    subscribeToNotifications() {
+        if (!state.user) return;
+
+        const notificationCount = document.getElementById('notification-count');
+        const notificationList = document.getElementById('notification-list');
+
+        const fetchAndRenderNotifications = async () => {
+            const { data, error } = await supabase.from('notifications').select('*').eq('is_read', false).eq('user_id', state.user.id);
+            
+            if (data && data.length > 0) {
+                notificationCount.textContent = data.length;
+                notificationCount.classList.remove('hidden');
+                notificationList.innerHTML = data.map(n => `<a href="${n.link}" class="block p-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">${n.message}</a>`).join('');
+            } else {
+                notificationCount.classList.add('hidden');
+                notificationList.innerHTML = `<p class="p-4 text-sm text-center text-slate-500">You're all caught up!</p>`;
+            }
+        };
+
+        fetchAndRenderNotifications();
+
+        state.notificationSubscription = supabase.channel('public:notifications')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${state.user.id}` }, payload => {
+                showNotification("You have a new notification!");
+                fetchAndRenderNotifications();
+            }).subscribe();
     },
 
     async initChat(taskId) {
@@ -879,57 +368,10 @@ const app = {
             </div>
         `;
     },
-    
-    async handleAiSuggest(button) {
-        const titleInput = document.getElementById('task-title');
-        const descriptionInput = document.getElementById('task-description');
-        const title = titleInput.value;
-
-        if (!title) {
-            return showNotification('Please enter a task title first.', true);
-        }
-
-        button.disabled = true;
-        button.innerHTML = `<i data-lucide="loader" class="animate-spin h-4 w-4"></i> Thinking...`;
-        lucide.createIcons();
-
-        try {
-            const { suggestion } = await api.suggestDescription(title);
-            descriptionInput.value = suggestion;
-            descriptionInput.style.height = 'auto';
-            descriptionInput.style.height = descriptionInput.scrollHeight + 'px';
-        } catch (error) {
-            showNotification(error.message, true);
-        } finally {
-            button.disabled = false;
-            button.innerHTML = `<i data-lucide="sparkles" class="h-4 w-4"></i> Suggest Details`;
-            lucide.createIcons();
-        }
-    },
 };
 
-// --- UTILS ---
-function showNotification(message, isError = false) {
-    const el = document.getElementById('notification');
-    const msgEl = document.getElementById('notification-message');
-    const iconEl = document.getElementById('notification-icon');
-    
-    msgEl.textContent = message;
-    el.className = `fixed bottom-5 right-5 text-white py-3 px-6 rounded-xl shadow-2xl translate-x-[120%] transform transition-transform duration-500 ease-in-out z-50 flex items-center gap-3 ${isError ? 'bg-red-600' : 'bg-[#8AA624]'}`;
-    iconEl.setAttribute('data-lucide', isError ? 'alert-triangle' : 'check-circle');
-    lucide.createIcons();
-    
-    el.classList.remove('translate-x-[120%]');
-    setTimeout(() => {
-        el.classList.add('translatex-[120%]');
-    }, 3500);
-}
-
 // --- START THE APP ---
-window.app = { handleAcceptBid: app.handleAcceptBid };
-window.ui = { closeModal: ui.closeModal };
+// We make the `app` and `ui` objects globally available so the router and HTML can call their methods.
+window.app = app;
+window.ui = ui;
 app.init();
-
-
-
-
