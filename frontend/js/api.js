@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
 // --- CONFIGURATION ---
-const API_BASE_URL = 'http://127.0.0.1:5000'; // Your Python server
+const API_BASE_URL = 'https://bidbridge.onrender.com'; // Your Python server
 const SUPABASE_URL = 'https://blmskxmzqaanstasqfpy.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJsbXNreG16cWFhbnN0YXNxZnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0OTU0NzQsImV4cCI6MjA3MDA3MTQ3NH0.5qSBIpjJOZLWT1ToWoX4Fy_-gIaW1V_sC9xtca6cHvA';
 // --- INITIALIZATION ---
