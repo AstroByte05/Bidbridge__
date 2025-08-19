@@ -1,13 +1,13 @@
-// js/api.js
-
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
 // --- CONFIGURATION ---
-const API_BASE_URL = 'https://bidbridge.onrender.com'; // Your deployed Render URL
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const API_BASE_URL = 'https://bidbridge.onrender.com'; // Your Python server
+const SUPABASE_URL = 'https://blmskxmzqaanstasqfpy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJsbXNreG16cWFhbnN0YXNxZnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0OTU0NzQsImV4cCI6MjA3MDA3MTQ3NH0.5qSBIpjJOZLWT1ToWoX4Fy_-gIaW1V_sC9xtca6cHvA';
+// --- INITIALIZATION ---
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
 export const api = {
     async request(endpoint, options = {}) {
@@ -46,3 +46,4 @@ export const api = {
     getProfile: () => api.request('/profile'),
     updateProfile: (data) => api.request('/profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
+export { supabase };
