@@ -7,41 +7,51 @@ users_bp = Blueprint('users_bp', __name__)
 
 # In backend/routes/users.py
 
+# In backend/routes/users.py
+
 @users_bp.route('/register', methods=['POST'])
 def register_user():
     """
-    Handles user registration using the admin client for reliability.
+    Handles user registration with detailed logging for debugging.
     """
+    print("\n--- New Registration Request ---")
     supabase_client = current_app.supabase
     data = request.json
     email = data.get('email')
     password = data.get('password')
     role = data.get('role', 'seller')
+    print(f"1. Received data for email: {email}, role: {role}")
 
     if not email or not password:
+        print("❌ Error: Email or password missing.")
         return jsonify({"error": "Email and password are required."}), 400
 
     try:
         # Step 1: Create the user in Supabase Auth's admin system.
+        print("2. Attempting to create user in Supabase Auth...")
         created_user_res = supabase_client.auth.admin.create_user({
             "email": email,
             "password": password,
             "email_confirm": True,
         })
         
-        # *** FIX: The user object is the response itself, not nested. ***
-        new_user = created_user_res
+        new_user = created_user_res.user
+        print(f"3. Successfully created Auth user with ID: {new_user.id}")
 
         # Step 2: Immediately create the public profile.
-        profile_response = supabase_client.table('users').insert({
+        print(f"4. Attempting to upsert profile for user ID: {new_user.id}...")
+        profile_response = supabase_client.table('users').upsert({
             'id': str(new_user.id),
             'email': new_user.email,
             'role': role
         }).execute()
+        print("5. Successfully upserted profile in public.users table.")
 
+        print("✅ Registration complete.")
         return jsonify({"message": "Registration successful! You can now log in."}), 201
 
     except Exception as e:
+        print(f"❌ REGISTRATION CRASHED. Error: {e}")
         current_app.logger.error(f"REGISTRATION CRASH: {e}")
         if "User already exists" in str(e):
              return jsonify({"error": "A user with this email already exists."}), 400
