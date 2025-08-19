@@ -375,15 +375,18 @@ import { state } from './state.js';
     };
 
     export function showNotification(message, isError = false) {
-        notificationMessage.textContent = message;
-        notificationEl.className = `fixed bottom-5 right-5 text-white py-3 px-6 rounded-xl shadow-2xl translate-x-[120%] transform transition-transform duration-500 ease-in-out z-50 flex items-center gap-3 ${isError ? 'bg-red-600' : 'bg-[#8AA624]'}`;
-        notificationIcon.setAttribute('data-lucide', isError ? 'alert-triangle' : 'check-circle');
-        if (window.lucide) {
-            window.lucide.createIcons();
-        }
-        
-        notificationEl.classList.remove('translate-x-[120%]');
-        setTimeout(() => {
-            notificationEl.classList.add('translatex-[120%]');
-        }, 3500);
-    }
+    const el = document.getElementById('notification');
+    const msgEl = document.getElementById('notification-message');
+    const iconEl = document.getElementById('notification-icon');
+    
+    msgEl.textContent = message;
+    el.className = `fixed bottom-5 right-5 text-white py-3 px-6 rounded-xl shadow-2xl translate-x-[120%] transform transition-transform duration-500 ease-in-out z-50 flex items-center gap-3 ${isError ? 'bg-red-600' : 'bg-[#8AA624]'}`;
+    iconEl.setAttribute('data-lucide', isError ? 'alert-triangle' : 'check-circle');
+    lucide.createIcons();
+    
+    el.classList.remove('translate-x-[120%]');
+    setTimeout(() => {
+        // *** FIX: Corrected the typo from 'translatex' to 'translate-x' ***
+        el.classList.add('translate-x-[120%]');
+    }, 3500);
+}

@@ -1,15 +1,20 @@
 // js/main.js
+
+// --- MODULE IMPORTS ---
 import { state } from './state.js';
 import { api, supabase } from './api.js';
 import { ui, showNotification } from './ui.js';
 import { authController } from './auth.js';
 import { router } from './router.js';
 
+// --- MAIN APP CONTROLLER ---
+// This object contains the core application logic.
 export const app = {
     init() {
         authController.init();
         this.addEventListeners();
     },
+
     addEventListeners() {
         document.body.addEventListener('click', e => {
             const navLink = e.target.closest('.nav-link');
@@ -24,6 +29,7 @@ export const app = {
             if (e.target.closest('#suggest-details-btn')) this.handleAiSuggest(e.target.closest('#suggest-details-btn'));
             if (e.target.closest('#delete-task-btn')) this.handleDeleteTask();
         });
+
         document.body.addEventListener('submit', e => {
             e.preventDefault();
             const form = e.target;
@@ -35,8 +41,11 @@ export const app = {
             else if (form.id === 'profile-form') this.handleUpdateProfile(form);
             else if (form.id === 'verification-form') this.handleVerificationUpload(form);
         });
+
         window.addEventListener('hashchange', () => router.handleLocation());
     },
+    
+    // --- DATA LOADING FUNCTIONS ---
     async loadDashboard() {
         try {
             const { data: profile, error } = await supabase.from('users').select('role').eq('id', state.user.id).single();
@@ -46,7 +55,9 @@ export const app = {
                 }
                 throw error;
             }
+            
             app.subscribeToNotifications();
+
             if (profile.role === 'buyer') {
                 window.location.hash = '#dashboard/my-tasks';
             } else {
@@ -111,7 +122,7 @@ export const app = {
         }
     },
 
-    // --- ACTION HANDLERS (Called by event listeners) ---
+    // --- ACTION HANDLERS ---
     async handlePostTask(form) {
         const taskData = {
             title: form.querySelector('#task-title').value,
@@ -301,9 +312,9 @@ export const app = {
             }).subscribe();
     },
 
-    async initChat(taskId) {
+   async initChat(taskId) {
         const chatBox = document.getElementById('chat-messages');
-        
+
         const { data: messages, error } = await supabase.from('messages').select(`*, users(email)`).eq('task_id', taskId).order('created_at');
         if (error) return showNotification(error.message, true);
 
@@ -312,9 +323,11 @@ export const app = {
 
         state.chatSubscription = supabase.channel(`chat:${taskId}`)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `task_id=eq.${taskId}` }, async (payload) => {
+                // The real-time listener is now the single source of truth for new messages.
                 const { data: newMessage, error } = await supabase.from('messages').select(`*, users(email)`).eq('id', payload.new.id).single();
                 if (error) return;
-                
+
+                // Check if the message element already exists to prevent rare duplicates.
                 if (!document.getElementById(`msg-${newMessage.id}`)) {
                     chatBox.insertAdjacentHTML('beforeend', app.renderMessage(newMessage));
                     chatBox.scrollTop = chatBox.scrollHeight;
@@ -323,26 +336,42 @@ export const app = {
             .subscribe();
     },
 
-    async handleSendMessage(form) {
+async handleSendMessage(form) {
         const input = form.querySelector('input');
         const text = input.value.trim();
-        if (text && state.currentTask) {
-            const originalText = text;
-            input.value = '';
 
+        if (text && state.currentTask) {
+            const chatBox = document.getElementById('chat-messages');
+            
+            // --- FIX: Optimistic UI Update ---
+            // 1. Create a temporary message object with the data we already have.
+            const optimisticMessage = {
+                id: Date.now(), // A temporary unique ID to prevent errors
+                text: text,
+                sender_id: state.user.id,
+                created_at: new Date().toISOString(),
+                users: { email: state.user.email } // Use the current user's email
+            };
+
+            // 2. Immediately append this temporary message to the UI.
+            chatBox.insertAdjacentHTML('beforeend', this.renderMessage(optimisticMessage));
+            chatBox.scrollTop = chatBox.scrollHeight;
+            input.value = ''; // Clear the input immediately
+
+            // 3. Send the actual message to the database in the background.
             const { error } = await supabase.from('messages').insert({
                 text: text,
                 task_id: state.currentTask.id,
                 sender_id: state.user.id
             });
 
+            // If there was an error, let the user know.
             if (error) {
                 showNotification(error.message, true);
-                input.value = originalText;
+                // Optional: find the optimistic message by its temporary ID and mark it as "failed to send"
             }
         }
     },
-    
     renderMessage(msg) {
         const isSent = msg.sender_id === state.user.id;
         const senderEmail = msg.users ? msg.users.email : 'Unknown User';
@@ -356,5 +385,7 @@ export const app = {
     },
 };
 
+// --- START THE APP ---
+window.app = app;
 window.ui = ui;
 app.init();
