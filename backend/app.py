@@ -19,10 +19,7 @@ def create_app():
     app = Flask(__name__)
     load_dotenv()
 
-    # --- INITIALIZATIONS ---
-    # Initialize CORS
-    # Allow requests from your deployed frontend and your local environment
-    CORS(app, resources={r"/*": {"origins": ["https://astrobyte05.github.io/", "http://127.0.0.1:5500"]}})
+    CORS(app, resources={r"/*": {"origins": ["https://astrobyte05.github.io", "http://127.0.0.1:5501"]}})
 
     # Initialize Supabase
     try:

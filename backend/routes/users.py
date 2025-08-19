@@ -3,8 +3,13 @@ from utils.security import require_auth
 
 users_bp = Blueprint('users_bp', __name__)
 
+# In backend/routes/users.py
+
 @users_bp.route('/register', methods=['POST'])
 def register_user():
+    """
+    Handles user registration using the admin client for reliability.
+    """
     supabase_client = current_app.supabase
     data = request.json
     email = data.get('email')
@@ -15,21 +20,30 @@ def register_user():
         return jsonify({"error": "Email and password are required."}), 400
 
     try:
+        # Step 1: Create the user in Supabase Auth's admin system.
         created_user_res = supabase_client.auth.admin.create_user({
-            "email": email, "password": password, "email_confirm": True,
+            "email": email,
+            "password": password,
+            "email_confirm": True,
         })
+        
+        # *** FIX: The user object is nested inside the response object. ***
         new_user = created_user_res.user
 
+        # Step 2: Immediately create the public profile.
         profile_response = supabase_client.table('users').insert({
-            'id': str(new_user.id), 'email': new_user.email, 'role': role
+            'id': str(new_user.id),
+            'email': new_user.email,
+            'role': role
         }).execute()
 
         return jsonify({"message": "Registration successful! You can now log in."}), 201
+
     except Exception as e:
         current_app.logger.error(f"REGISTRATION CRASH: {e}")
         if "User already exists" in str(e):
              return jsonify({"error": "A user with this email already exists."}), 400
-        return jsonify({"error": "An unexpected server error occurred."}), 500
+        return jsonify({"error": "An unexpected server error occurred during registration."}), 500
 
 @users_bp.route('/profile', methods=['GET', 'PUT'])
 @require_auth
