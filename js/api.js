@@ -8,6 +8,8 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // This object centralizes all our API calls.
 export const api = {
+
+
     async request(endpoint, options = {}) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("User not logged in.");
@@ -18,6 +20,7 @@ export const api = {
             ...options.headers,
         };
         
+        // *** FIX: Removed the extra comma after ...options ***
         const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
         
         const responseData = await response.json();
