@@ -29,7 +29,12 @@ export const api = {
         }
         return responseData;
     },
+   // In frontend/js/api.js
+
+// In frontend/js/api.js
+
     async publicRequest(endpoint, options = {}) {
+        // *** FIX: Removed the extra comma after ...options ***
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             headers: { 'Content-Type': 'application/json', ...options.headers },
