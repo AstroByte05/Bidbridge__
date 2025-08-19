@@ -45,3 +45,4 @@ export const api = {
     getProfile: () => api.request('/profile'),
     updateProfile: (data) => api.request('/profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
+export { supabase };
