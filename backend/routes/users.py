@@ -5,6 +5,8 @@ users_bp = Blueprint('users_bp', __name__)
 
 # In backend/routes/users.py
 
+# In backend/routes/users.py
+
 @users_bp.route('/register', methods=['POST'])
 def register_user():
     """
@@ -27,8 +29,8 @@ def register_user():
             "email_confirm": True,
         })
         
-        # *** FIX: The user object is nested inside the response object. ***
-        new_user = created_user_res.user
+        # *** FIX: The user object is the response itself, not nested. ***
+        new_user = created_user_res
 
         # Step 2: Immediately create the public profile.
         profile_response = supabase_client.table('users').insert({
