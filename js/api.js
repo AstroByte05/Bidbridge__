@@ -6,10 +6,9 @@ const SUPABASE_URL = 'https://blmskxmzqaanstasqfpy.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJsbXNreG16cWFhbnN0YXNxZnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0OTU0NzQsImV4cCI6MjA3MDA3MTQ3NH0.5qSBIpjJOZLWT1ToWoX4Fy_-gIaW1V_sC9xtca6cHvA';
 // --- INITIALIZATION ---
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// This object centralizes all our API calls.
+
+
 export const api = {
-
-
     async request(endpoint, options = {}) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("User not logged in.");
@@ -20,7 +19,6 @@ export const api = {
             ...options.headers,
         };
         
-        // *** FIX: Removed the extra comma after ...options ***
         const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
         
         const responseData = await response.json();
@@ -29,12 +27,7 @@ export const api = {
         }
         return responseData;
     },
-   // In frontend/js/api.js
-
-// In frontend/js/api.js
-
     async publicRequest(endpoint, options = {}) {
-        // *** FIX: Removed the extra comma after ...options ***
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -52,6 +45,3 @@ export const api = {
     getProfile: () => api.request('/profile'),
     updateProfile: (data) => api.request('/profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
-
-// We also export the Supabase client so other files can use it for real-time features.
-export { supabase };

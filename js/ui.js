@@ -1,29 +1,24 @@
-// js/ui.js
-
 import { state } from './state.js';
 
-// --- UI ELEMENTS (Scoped to this file) ---
-const mainContent = document.getElementById('main-content');
-const modalContainer = document.getElementById('modal-container');
-const modalContent = document.getElementById('modal-content');
-const notificationEl = document.getElementById('notification');
-const notificationMessage = document.getElementById('notification-message');
-const notificationIcon = document.getElementById('notification-icon');
+    const mainContent = document.getElementById('main-content');
+    const modalContainer = document.getElementById('modal-container');
+    const modalContent = document.getElementById('modal-content');
+    const notificationEl = document.getElementById('notification');
+    const notificationMessage = document.getElementById('notification-message');
+    const notificationIcon = document.getElementById('notification-icon');
 
-
-// This object contains all the HTML templates for the different pages (views).
-export const ui = {
-    render(html) {
-        mainContent.innerHTML = html;
-        lucide.createIcons();
-    },
-
-    createStaggeredTitle(text) {
-        return text.split('').map((letter, index) =>
-            `<span class="stagger-letter" style="animation-delay: ${index * 40}ms">${letter === ' ' ? '&nbsp;' : letter}</span>`
-        ).join('');
-    },
-
+    export const ui = {
+        render(html) {
+            mainContent.innerHTML = html;
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        },
+        createStaggeredTitle(text) {
+            return text.split('').map((letter, index) =>
+                `<span class="stagger-letter" style="animation-delay: ${index * 40}ms">${letter === ' ' ? '&nbsp;' : letter}</span>`
+            ).join('');
+        },
     WelcomeView: () => `
         <div class="text-center py-16 md:py-24 fade-in">
             <h1 class="text-5xl md:text-7xl font-heading font-bold mb-4">${ui.createStaggeredTitle('Fast. Local. Trusted.')}</h1>
@@ -358,35 +353,37 @@ export const ui = {
         `;
     },
 
-    openModal(html) {
-        modalContent.innerHTML = html;
-        lucide.createIcons();
-        modalContainer.classList.remove('hidden');
-        modalContainer.classList.add('flex');
-        setTimeout(() => {
-            modalContent.classList.remove('scale-95', 'opacity-0');
-        }, 10);
-    },
+  openModal(html) {
+            modalContent.innerHTML = html;
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+            modalContainer.classList.remove('hidden');
+            modalContainer.classList.add('flex');
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        },
+        closeModal() {
+            modalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modalContainer.classList.add('hidden');
+                modalContainer.classList.remove('flex');
+                modalContent.innerHTML = '';
+            }, 300);
+        },
+    };
 
-    closeModal() {
-        modalContent.classList.add('scale-95', 'opacity-0');
+    export function showNotification(message, isError = false) {
+        notificationMessage.textContent = message;
+        notificationEl.className = `fixed bottom-5 right-5 text-white py-3 px-6 rounded-xl shadow-2xl translate-x-[120%] transform transition-transform duration-500 ease-in-out z-50 flex items-center gap-3 ${isError ? 'bg-red-600' : 'bg-[#8AA624]'}`;
+        notificationIcon.setAttribute('data-lucide', isError ? 'alert-triangle' : 'check-circle');
+        if (window.lucide) {
+            window.lucide.createIcons();
+        }
+        
+        notificationEl.classList.remove('translate-x-[120%]');
         setTimeout(() => {
-            modalContainer.classList.add('hidden');
-            modalContainer.classList.remove('flex');
-            modalContent.innerHTML = '';
-        }, 300);
-    },
-};
-
-// This function is exported separately because it's a utility.
-export function showNotification(message, isError = false) {
-    notificationMessage.textContent = message;
-    notificationEl.className = `fixed bottom-5 right-5 text-white py-3 px-6 rounded-xl shadow-2xl translate-x-[120%] transform transition-transform duration-500 ease-in-out z-50 flex items-center gap-3 ${isError ? 'bg-red-600' : 'bg-[#8AA624]'}`;
-    notificationIcon.setAttribute('data-lucide', isError ? 'alert-triangle' : 'check-circle');
-    lucide.createIcons();
-    
-    notificationEl.classList.remove('translate-x-[120%]');
-    setTimeout(() => {
-        notificationEl.classList.add('translatex-[120%]');
-    }, 3500);
-}
+            notificationEl.classList.add('translatex-[120%]');
+        }, 3500);
+    }

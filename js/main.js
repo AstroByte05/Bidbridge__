@@ -1,23 +1,15 @@
 // js/main.js
-
-// --- MODULE IMPORTS ---
-// This file is now the main entry point that orchestrates all the other modules.
 import { state } from './state.js';
 import { api, supabase } from './api.js';
 import { ui, showNotification } from './ui.js';
 import { authController } from './auth.js';
 import { router } from './router.js';
 
-// --- MAIN APP CONTROLLER ---
-// This object contains the core application logic that isn't related to auth or routing.
 export const app = {
     init() {
-        // Start the authentication listener.
         authController.init();
-        // Set up all the global event listeners for the application.
         this.addEventListeners();
     },
-
     addEventListeners() {
         document.body.addEventListener('click', e => {
             const navLink = e.target.closest('.nav-link');
@@ -32,7 +24,6 @@ export const app = {
             if (e.target.closest('#suggest-details-btn')) this.handleAiSuggest(e.target.closest('#suggest-details-btn'));
             if (e.target.closest('#delete-task-btn')) this.handleDeleteTask();
         });
-
         document.body.addEventListener('submit', e => {
             e.preventDefault();
             const form = e.target;
@@ -44,11 +35,8 @@ export const app = {
             else if (form.id === 'profile-form') this.handleUpdateProfile(form);
             else if (form.id === 'verification-form') this.handleVerificationUpload(form);
         });
-
         window.addEventListener('hashchange', () => router.handleLocation());
     },
-    
-    // --- DATA LOADING FUNCTIONS (Called by the router) ---
     async loadDashboard() {
         try {
             const { data: profile, error } = await supabase.from('users').select('role').eq('id', state.user.id).single();
@@ -58,9 +46,7 @@ export const app = {
                 }
                 throw error;
             }
-            
             app.subscribeToNotifications();
-
             if (profile.role === 'buyer') {
                 window.location.hash = '#dashboard/my-tasks';
             } else {
@@ -370,8 +356,5 @@ export const app = {
     },
 };
 
-// --- START THE APP ---
-// We make the `app` and `ui` objects globally available so the router and HTML can call their methods.
-window.app = app;
 window.ui = ui;
 app.init();
