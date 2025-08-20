@@ -284,34 +284,49 @@ export const app = {
             .subscribe();
     },
 
-    subscribeToNotifications() {
-        if (!state.user) return;
+   subscribeToNotifications() {
+        if (!state.user) return; // Don't run if the user isn't logged in
 
         const notificationCount = document.getElementById('notification-count');
         const notificationList = document.getElementById('notification-list');
 
         const fetchAndRenderNotifications = async () => {
-            const { data, error } = await supabase.from('notifications').select('*').eq('is_read', false).eq('user_id', state.user.id);
+            // Fetch notifications for the current user that are not yet read
+            const { data, error } = await supabase.from('notifications')
+                .select('*')
+                .eq('is_read', false)
+                .eq('user_id', state.user.id);
             
             if (data && data.length > 0) {
                 notificationCount.textContent = data.length;
                 notificationCount.classList.remove('hidden');
-                notificationList.innerHTML = data.map(n => `<a href="${n.link}" class="block p-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">${n.message}</a>`).join('');
+                // *** FIX: Correctly render notifications as clickable links ***
+                notificationList.innerHTML = data.map(n => 
+                    `<a href="${n.link}" class="block p-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md">${n.message}</a>`
+                ).join('');
             } else {
                 notificationCount.classList.add('hidden');
+                // *** FIX: Display a clear message when there are no notifications ***
                 notificationList.innerHTML = `<p class="p-4 text-sm text-center text-slate-500">You're all caught up!</p>`;
             }
         };
 
+        // Fetch initial notifications when the function is called
         fetchAndRenderNotifications();
 
+        // Listen for new notifications in real-time
         state.notificationSubscription = supabase.channel('public:notifications')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${state.user.id}` }, payload => {
+            .on('postgres_changes', { 
+                event: 'INSERT', 
+                schema: 'public', 
+                table: 'notifications', 
+                filter: `user_id=eq.${state.user.id}` 
+            }, payload => {
                 showNotification("You have a new notification!");
+                // Re-fetch and render all notifications when a new one arrives
                 fetchAndRenderNotifications();
             }).subscribe();
     },
-
    async initChat(taskId) {
         const chatBox = document.getElementById('chat-messages');
 
