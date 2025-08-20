@@ -15,7 +15,7 @@ export const app = {
         this.addEventListeners();
     },
 
-    addEventListeners() {
+   addEventListeners() {
         document.body.addEventListener('click', e => {
             const navLink = e.target.closest('.nav-link');
             if (navLink) {
@@ -28,6 +28,16 @@ export const app = {
             if (e.target.closest('#mobile-menu-btn')) document.getElementById('mobile-menu').classList.toggle('hidden');
             if (e.target.closest('#suggest-details-btn')) this.handleAiSuggest(e.target.closest('#suggest-details-btn'));
             if (e.target.closest('#delete-task-btn')) this.handleDeleteTask();
+
+            // *** FIX: Added event listener for the notification bell ***
+            const bell = e.target.closest('#notification-bell');
+            const notificationList = document.getElementById('notification-list');
+            if (bell) {
+                notificationList.classList.toggle('hidden');
+            } else if (!e.target.closest('#notification-list-container')) {
+                // This ensures the list closes when you click anywhere else
+                notificationList.classList.add('hidden');
+            }
         });
 
         document.body.addEventListener('submit', e => {
