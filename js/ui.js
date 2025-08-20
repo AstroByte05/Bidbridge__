@@ -134,6 +134,10 @@ import { state } from './state.js';
 
     TaskDetailView: (task, bids) => {
         const isOwner = task.poster_id === state.user?.id;
+        // *** FIX: Check if the current user is part of the assigned task ***
+        const isParticipant = isOwner || task.volunteer_id === state.user?.id;
+        const canChat = task.status === 'assigned' && isParticipant;
+
         return `
         <div class="fade-in">
             <a href="#dashboard" class="nav-link btn btn-secondary mb-6"><i data-lucide="arrow-left"></i>Back</a>
@@ -173,7 +177,8 @@ import { state } from './state.js';
                         </div>
                         ${(task.status === 'open' && !isOwner) ? ui.BidForm() : ''}
                     </div>
-                    <div id="chat-section" class="${task.status === 'assigned' ? '' : 'hidden'}">
+                    <!-- The chat section is now only shown if the user is a participant -->
+                    <div id="chat-section" class="${canChat ? '' : 'hidden'}">
                         <h3 class="font-heading text-2xl font-semibold mb-4">Chat</h3>
                         <div id="chat-messages" class="chat-box"></div>
                         <form id="chat-form" class="flex gap-2 mt-4">
