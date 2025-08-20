@@ -1,140 +1,155 @@
-# 🏗️ BidBridge
+# 🚚 BidBridge – Real-Time Task Bidding Platform
 
-**BidBridge** is a task bidding platform where users can post tasks, place bids, and view live updates in real time.
-Built with **HTML/CSS/JavaScript (Frontend)**, **Python Flask (Backend)**, and **Supabase (Database).** 🌐
+**BidBridge** is a hyperlocal delivery and task bidding platform where users can post tasks, drivers/volunteers can place bids, and updates are delivered in real time.  
+It ensures **fair opportunities for drivers** and **best value for customers** — all wrapped in a secure, multilingual, and user-friendly system. 🌐  
 
-## 📖 About the Project 📖
+🔗 **Live Preview:** [BidBridge Website](https://astrobyte05.github.io/Bidbridge__/)  
 
- BidBridge connects task posters with nearby drivers through real-time bidding, ensuring the best price and fastest service. Drivers get fair opportunities, and customers save time and money.
-- **Frontend**: Handles UI rendering and API requests.
-- **Backend**: Processes requests via Flask.
-- **Database**: Supabase for cloud-hosted storage.
+---
 
------
+## 📖 About the Project
 
-## 📝 Features 📝
+BidBridge solves the inefficiencies of manual task allocation by providing a **real-time bidding system** for local delivery and service tasks.  
+- **Buyers** can post tasks and pick the best offer.  
+- **Sellers/Volunteers** can bid competitively with transparency.  
+- **Admins** can verify profiles, track analytics, and ensure fair play.  
 
-- 🗒️ **Post Tasks** — Create delivery or moving jobs with a title and description.  
-- 💸 **Place Bids** — Drivers can submit competitive bids for posted tasks.  
-- ⏱️ **Real-Time Updates** — View and manage all bids instantly as they arrive.  
-- 📱 **Responsive Design** — Clean, intuitive UI that works across devices.  
-- ☁️ **Supabase Integration** — Cloud-hosted database for secure and scalable data storage.  
-- 🐍 **Python Flask Backend** — API built with Flask to handle business logic and data operations efficiently.  
+---
 
------
+## ✨ Features
 
-## 🛠️ Tech Stack 🛠️
+- 🧑‍🤝‍🧑 **User Accounts & Roles** – Buyers and sellers have separate dashboards with role-based access.  
+- 🔐 **Secure Authentication** – JWT + Supabase Auth for login & session management.  
+- ✅ **Volunteer Verification** – Profile completion, document upload, admin approval, OTP phone/email verification, and a verified badge.  
+- 💬 **In-App Chat** – WhatsApp-style messaging with Supabase Realtime (typing indicators, attachments).  
+- ⏱️ **Instant Updates** – Real-time bid updates powered by Supabase Realtime API/WebSockets.  
+- 🔍 **Search & Filters** – Find tasks by keyword, budget, or deadline with filters for price and date.  
+- 🌐 **Multi-Language Support** – English, Hindi, Marathi with AI-powered translation and text cleanup.  
+- 📊 **Bid History & Analytics** – Track previous bids, winning trends, and average success prices.  
+- ⚡ **Optimized Performance** – Indexed queries on frequently accessed fields like `task_id` and `created_at`.  
+- 🛡️ **Error Monitoring** – Integrated Sentry/logging for production error tracking.  
+- 🌓 **Responsive UI + Dark Mode** – Works seamlessly across devices with theme options.  
 
-| Layer         | Technology              |
-|--------------|--------------------------|
-| **Frontend** | HTML, CSS, JavaScript     |
-| **Backend**  | Python Flask              |
-| **Database** | Supabase (PostgreSQL)     |
-| **Hosting**  | Supabase, Local/Cloud API |
-| **Real-Time**| Supabase subscriptions    |
+---
 
------
+## 🛠️ Tech Stack
 
-## 📂 Project Structure 📂
+| Layer            | Technology / Service                          |
+|------------------|-----------------------------------------------|
+| **Frontend**     | HTML, Tailwind CSS, JavaScript (ES Modules)   |
+| **Backend**      | Python Flask (REST APIs)                      |
+| **Database**     | Supabase (PostgreSQL + Realtime API)          |
+| **Auth**         | Supabase Auth + JWT                          |
+| **Realtime**     | Supabase Realtime API / WebSockets            |
+| **AI Services**  | Google Gemini API (AI text + translations)    |
+| **Error Tracking**| Sentry / Logging system                      |
+| **Hosting**      | GitHub Pages (Frontend) + Supabase Backend    |
 
-bidbridge/
-├── backend/
-│   ├── app.py                # Flask API entry point
-│   ├── routes/               # API endpoints
-│   ├── models/               # Database models
-│   └── requirements.txt      # Backend dependencies
-├── frontend/
-│   ├── index.html            # Main UI page
-│   ├── styles/               # CSS files
-│   └── scripts/              # JavaScript files
-├── README.md
-└── .env                      # Environment variables
+---
 
------
+## 📂 Project Structure
 
-## ⚙️ Installation ⚙️
+```plaintext
+BidBridge/
+├── backend/                   # Flask backend
+│   ├── app.py                 # Entry point
+│   ├── routes/                # API endpoints
+│   ├── models/                # Database models
+│   ├── services/              # Auth, Chat, Verification, Analytics
+│   └── requirements.txt       # Python dependencies
+├── frontend/                  # UI
+│   ├── index.html             # Main page
+│   ├── styles/                # Tailwind & custom CSS
+│   ├── scripts/               # JS logic, API integration
+│   └── assets/                # Images, icons
+├── docs/                      # Screenshots, diagrams
+├── README.md                  # Documentation
+└── .env                       # Environment variables
+```
 
-1️⃣ Clone the Repository
-  ```bash
+---
 
-  git clone https://github.com/yourusername/bidbridge.git
-  cd bidbridge
-  ```
+## ⚙️ Setup & Installation
 
-2️⃣ Set Up Backend
-  ```bash
+### 1️⃣ Clone Repository
+```bash
+git clone https://github.com/astrobyte05/Bidbridge__.git
+cd Bidbridge__
+```
 
-  cd backend
-  pip install -r requirements.txt
-  ```
+### 2️⃣ Backend Setup
+```bash
+cd backend
+pip install -r requirements.txt
+```
 
-3️⃣ Configure Environment Variables
-  ```bash
+### 3️⃣ Configure Environment Variables
+Create `.env` file:
+```env
+SUPABASE_URL=your-supabase-url
+SUPABASE_KEY=your-service-key
+GEMINI_API_KEY=your-gemini-api-key
+JWT_SECRET=your-jwt-secret
+SENTRY_DSN=your-sentry-dsn
+```
 
-  Duplicate .env.example → rename it to .env
+### 4️⃣ Frontend Setup
+- If using npm for JS dependencies:
+```bash
+cd frontend
+npm install
+```
+- Or open `index.html` directly in your browser.
 
-  Get your Supabase URL and API key from Supabase
+---
 
-  Add them inside .env:
-  SUPABASE_URL=your-url-here
-  SUPABASE_KEY=your-key-here
-  ```
+## 🖥️ Run Locally
 
-4️⃣ Install Frontend Dependencies (if any)
-  ```bash
+### Start Backend
+```bash
+cd backend
+python app.py
+```
+Runs at: **http://127.0.0.1:5000**
 
-  If your frontend has a package.json:
-  cd frontend
-  npm install
-  Otherwise, just open the HTML files in your browser.
-  ```
+### Open Frontend
+- Open `frontend/index.html` in your browser  
+- Or run with Live Server (VS Code extension)  
 
-## 🖥️ Run Locally 🖥️
-  ```bash
+---
 
-  Start the Backend:
-        -cd backend
-        -python main.py
+## 🚀 Usage Flow
 
-  Backend will run at: http://127.0.0.1:5000
+- **Post a Task** – User enters details & budget.  
+- **Bidding** – Volunteers submit live bids, shown instantly.  
+- **Chat** – Poster & volunteer communicate directly inside app.  
+- **Verification** – Admin checks documents, approves volunteers.  
+- **Selection** – Poster accepts best bid → task assigned.  
+- **Analytics** – Dashboard shows trends, history, and performance.  
 
-  View the Frontend
-        -Open frontend/index.html in your browser
-        -Or use Live Server in VS Code
-  ```
+---
 
------
+## 🔄 How It Works
 
-## 🚀 Usage Flow 🚀
+**Flow 1 – Task Posting**  
+1. Frontend sends `POST /tasks`  
+2. Backend validates & inserts into Supabase  
+3. Realtime update → Task appears in all dashboards  
 
-- **Post a Task** – User enters title & description of the delivery/moving job.
-- **Drivers Bid** – Nearby drivers submit real-time bids.
-- **Live Updates** – Task creator sees all bids instantly.
-- **Choose Winner** – Select the most suitable bid and confirm.
+**Flow 2 – Bidding**  
+1. Volunteer submits bid → Backend stores in `bids` table  
+2. Supabase Realtime broadcasts update → All users see bid instantly  
 
------
+**Flow 3 – Chat & Verification**  
+1. Messages sent via Supabase Realtime → Delivered instantly  
+2. Verification handled by admin dashboard → badge shown once approved  
 
-## 🔄 How It Works 🔄
+---
 
-Flow 1 – Posting a Task
- -Frontend sends POST /tasks with task data.
- -Backend inserts into Supabase tasks table.
- -Database saves the task & returns success.
-
-Flow 2 – Placing a Bid
- -Frontend sends POST /bids with bid details.
- -Backend inserts into Supabase bids table.
- -Database saves bid linked to the task.
-
-Flow 3 – Viewing Bids
- -Frontend sends GET /bids?task_id=123.
- -Backend fetches from Supabase.
- -Database returns data for UI display.
-
------
-
-## 🚨 Usage Policy 🚨
-
+## 🚨 Usage Policy
 This project is for academic use only.
 Using it for cheating, bypassing systems, or any unethical purpose is strictly prohibited.
 By running this project, you agree to follow this policy.
+
+---
+
